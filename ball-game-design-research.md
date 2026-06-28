@@ -2,6 +2,8 @@
 
 *Research for a kid-built "merge the oil drops / eat smaller balls" game, with the goal of adding enough gameplay depth to publish it.*
 
+> **See the [Design Decisions (v2)](#design-decisions-v2--the-teams-chosen-direction) section at the bottom for the direction the team has actually chosen.** Sections 1–6 are the original genre research.
+
 ---
 
 ## 1. What the game is right now (the starting point)
@@ -118,3 +120,48 @@ The game's core idea is genuinely strong — it's Agar.io's mechanic with a char
 - Evolution of Species 2: [Google Play](https://play.google.com/store/apps/details?id=com.EvolutionOfGames.EvolutionOfSpecies2&hl=en&gl=US)
 - Genre alternatives (Mope.io, Deeeep.io, Tasty Planet, Nebulous): [Beebom list](https://beebom.com/best-agar-io-alternatives/) · [Top IO games 2026](https://playgama.com/blog/top-games/top-io-games-april-2026/)
 - Casual/arcade design: [Juice in game design](https://www.bloodmooninteractive.com/articles/juice.html) · [Casual game design fundamentals](https://gamedesignskills.com/game-design/casual/) · [Hyper-casual checklist](https://www.cubix.co/blog/hyper-casual-games-development-checklist/)
+
+---
+
+## Design Decisions (v2) — the team's chosen direction
+
+After the research, the team locked in these decisions. This is now the working design.
+
+### Core decisions
+- **Single-player** (with AI blobs as prey/predators). No real multiplayer to build.
+- **Win condition: defeat a set number of bosses.** Bosses ramp in difficulty; the final boss is the climax.
+- **Small players survive by hiding** in *vegetable crevices* (e.g. broccoli florets floating in the soup) — tight gaps that small blobs can slip into.
+- **Theme: the kitchen / a bowl of soup.** Lean fully into the oil-drops-on-soup origin. Condiments and ingredients become the content.
+
+### The headline system: SKINS = CHARACTERS (abilities, not just looks)
+Each functional skin changes how you play and **must carry a downside** (golden rule: no skin is strictly best). Confirmed so far:
+- **Chili pepper** — *slower*, but projects a **fire radius**: oil blobs that get near take a **burn** effect and lose oil over time.
+- **Sesame oil / sesame seeds** — can **split into MORE blobs than normal**, but each is **smaller/weaker** (sesame seeds are tiny). A "swarm" playstyle.
+- **Plan: every skin type gets its own ability** with a tradeoff.
+
+Candidate condiment abilities to fill out the roster (each needs a downside):
+| Skin | Ability | Downside |
+|---|---|---|
+| Soy sauce | dark cloud that hides you / blinds enemies | — |
+| Garlic | repel radius — smaller blobs flee from you | maybe can't eat while active |
+| Honey | sticky — slows nearby prey | you're slow too |
+| Scallion | fast dash boost | low max size |
+| Vinegar | shrinks nearby blobs over time | short range |
+| Salt | ranged sprinkle that chips away | tiny damage per hit |
+| Butter | very fast, slippery, hard to catch | can't hold much oil |
+
+### Split mechanic (confirmed)
+- **Tap your blob → split into two smaller blobs** to chase down faster prey (Agar.io-style).
+- **Sesame** splits into *more* but *smaller* blobs (swarm).
+- **To decide:** split should have a **cooldown** (no spam), blobs should **auto re-merge after a few seconds** (so players don't get stuck weak), and being split = **more vulnerable** (the risk that makes it a real choice).
+
+### Economy — two reward tracks
+- **Functional skins** (chili, sesame, …) are **unlocked by defeating bosses / completing challenges.**
+- **Game credits** are **earned by completing challenges**, and spent on **cosmetic eye types** (purely visual, no gameplay effect).
+- Keep the two visibly distinct so players understand "skin = changes play" vs "eye = looks only."
+
+### Open questions still to settle
+1. **One skin per run** (pick a character before the match — recommended) **vs. switch mid-run.**
+2. **Challenges: in-run** ("eat 10 broccoli this match") **vs. meta** ("defeat 3 bosses total") — mixing both works well.
+3. **Hiding spots:** size-gate the crevices (only small blobs fit) and add a soft time limit so players can't camp forever.
+4. **Bosses:** each should drop a skin or credits to fuel the loop; ramp difficulty; final boss = the win.
