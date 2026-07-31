@@ -25,6 +25,8 @@
     };
   }
 
+  var IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
   // ---------- renderer / scene ----------
   var canvas = document.getElementById('game-canvas');
   var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
@@ -49,7 +51,7 @@
   var sun = new THREE.DirectionalLight(0xfff2d0, 1.1);
   sun.position.set(40, 80, 30);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(IS_TOUCH ? 1024 : 2048, IS_TOUCH ? 1024 : 2048);
   sun.shadow.camera.left = -140; sun.shadow.camera.right = 140;
   sun.shadow.camera.top = 140; sun.shadow.camera.bottom = -140;
   sun.shadow.camera.far = 300;
@@ -706,27 +708,127 @@
   var pitch = 0;
   var pointerLocked = false;
 
-  document.addEventListener('keydown', function (e) { keys[e.code] = true; });
+  document.addEventListener('keydown', function (e) {
+    keys[e.code] = true;
+    if ((e.code === 'Space' || e.code === 'Enter') && state === 'playing') {
+      e.preventDefault();
+      tryShoot();
+    }
+  });
   document.addEventListener('keyup', function (e) { keys[e.code] = false; });
 
-  function requestLock() { canvas.requestPointerLock(); }
+  function requestLock() {
+    if (IS_TOUCH || !canvas.requestPointerLock) return;
+    try { canvas.requestPointerLock(); } catch (e) { }
+  }
   document.addEventListener('pointerlockchange', function () {
     pointerLocked = document.pointerLockElement === canvas;
-    if (state === 'playing' && !pointerLocked) {
+    if (state === 'playing' && !pointerLocked && !IS_TOUCH) {
       state = 'paused';
       show('pause-screen');
     }
   });
+  function applyAim(dx, dy, sens) {
+    player.yaw -= dx * sens;
+    pitch += dy * sens;
+    pitch = Math.max(-0.45, Math.min(0.85, pitch));
+  }
   document.addEventListener('mousemove', function (e) {
     if (!pointerLocked || state !== 'playing') return;
-    player.yaw -= e.movementX * 0.0023;
-    pitch += e.movementY * 0.0023;
-    pitch = Math.max(-0.45, Math.min(0.85, pitch));
+    applyAim(e.movementX, e.movementY, 0.0023);
   });
-  document.addEventListener('mousedown', function (e) {
-    if (state !== 'playing' || !pointerLocked || e.button !== 0) return;
-    tryShoot();
+  var dragAim = null; // fallback aiming when pointer lock is unavailable
+  canvas.addEventListener('mousedown', function (e) {
+    if (state !== 'playing' || e.button !== 0) return;
+    if (pointerLocked) { tryShoot(); return; }
+    requestLock();
+    dragAim = { x: e.clientX, y: e.clientY, moved: 0 };
   });
+  document.addEventListener('mousemove', function (e) {
+    if (!dragAim || pointerLocked || state !== 'playing') return;
+    var dx = e.clientX - dragAim.x, dy = e.clientY - dragAim.y;
+    dragAim.moved += Math.abs(dx) + Math.abs(dy);
+    dragAim.x = e.clientX; dragAim.y = e.clientY;
+    applyAim(dx, dy, 0.0045);
+  });
+  document.addEventListener('mouseup', function () {
+    if (dragAim && !pointerLocked && state === 'playing' && dragAim.moved < 6) tryShoot();
+    dragAim = null;
+  });
+
+  // ---------- touch controls ----------
+  var touchUi = document.getElementById('touch-ui');
+  var joystickEl = document.getElementById('joystick');
+  var knobEl = document.getElementById('joystick-knob');
+  var fireBtn = document.getElementById('fire-btn');
+  var joy = { id: null, baseX: 0, baseY: 0, x: 0, y: 0 };   // x,y in [-1,1]
+  var aimTouch = { id: null, lastX: 0, lastY: 0 };
+  var fireHeld = false;
+
+  if (IS_TOUCH) {
+    var controlsLine = document.getElementById('controls-line');
+    if (controlsLine) controlsLine.textContent = 'LEFT STICK — move  |  DRAG RIGHT SIDE — aim  |  🎆 BUTTON — fire';
+
+    joystickEl.addEventListener('touchstart', function (e) {
+      e.preventDefault();
+      var t = e.changedTouches[0];
+      var r = joystickEl.getBoundingClientRect();
+      joy.id = t.identifier;
+      joy.baseX = r.left + r.width / 2;
+      joy.baseY = r.top + r.height / 2;
+    }, { passive: false });
+
+    fireBtn.addEventListener('touchstart', function (e) {
+      e.preventDefault();
+      fireHeld = true;
+      tryShoot();
+    }, { passive: false });
+    fireBtn.addEventListener('touchend', function (e) { e.preventDefault(); fireHeld = false; }, { passive: false });
+
+    document.addEventListener('touchstart', function (e) {
+      if (state !== 'playing') return;
+      for (var k = 0; k < e.changedTouches.length; k++) {
+        var t = e.changedTouches[k];
+        if (t.identifier === joy.id) continue;
+        if (t.target === fireBtn || t.target === joystickEl || t.target === knobEl) continue;
+        if (aimTouch.id === null) {
+          aimTouch.id = t.identifier;
+          aimTouch.lastX = t.clientX; aimTouch.lastY = t.clientY;
+        }
+      }
+    }, { passive: false });
+
+    document.addEventListener('touchmove', function (e) {
+      if (state !== 'playing') return;
+      e.preventDefault();
+      for (var k = 0; k < e.changedTouches.length; k++) {
+        var t = e.changedTouches[k];
+        if (t.identifier === joy.id) {
+          var dx = t.clientX - joy.baseX, dy = t.clientY - joy.baseY;
+          var len = Math.hypot(dx, dy), max = 52;
+          if (len > max) { dx = dx / len * max; dy = dy / len * max; }
+          joy.x = dx / max; joy.y = dy / max;
+          knobEl.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
+        } else if (t.identifier === aimTouch.id) {
+          applyAim(t.clientX - aimTouch.lastX, t.clientY - aimTouch.lastY, 0.006);
+          aimTouch.lastX = t.clientX; aimTouch.lastY = t.clientY;
+        }
+      }
+    }, { passive: false });
+
+    var endTouch = function (e) {
+      for (var k = 0; k < e.changedTouches.length; k++) {
+        var t = e.changedTouches[k];
+        if (t.identifier === joy.id) {
+          joy.id = null; joy.x = 0; joy.y = 0;
+          knobEl.style.transform = 'translate(-50%, -50%)';
+        }
+        if (t.identifier === aimTouch.id) aimTouch.id = null;
+      }
+    };
+    document.addEventListener('touchend', endTouch);
+    document.addEventListener('touchcancel', endTouch);
+  }
 
   function tryShoot() {
     if (player.fireCooldown > 0) return;
@@ -820,6 +922,8 @@
     hideAll();
     requestLock();
     audio();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (IS_TOUCH) touchUi.classList.remove('hidden');
     showMessage('Grab the firework next to you — you will need it!', 4);
   });
   document.getElementById('resume-btn').addEventListener('click', function () {
@@ -834,14 +938,18 @@
   function winGame() {
     state = 'won';
     victoryTimer = 0;
+    fireHeld = false;
     sfx.fanfare();
-    document.exitPointerLock();
+    if (document.exitPointerLock) document.exitPointerLock();
+    touchUi.classList.add('hidden');
     show('victory-screen');
   }
   function loseGame() {
     state = 'lost';
+    fireHeld = false;
     sfx.meow();
-    document.exitPointerLock();
+    if (document.exitPointerLock) document.exitPointerLock();
+    touchUi.classList.add('hidden');
     show('gameover-screen');
   }
 
@@ -860,10 +968,19 @@
     if (keys.KeyD || keys.ArrowRight) { mx += rx; mz += rz; }
     if (keys.KeyA || keys.ArrowLeft) { mx -= rx; mz -= rz; }
     var len = Math.hypot(mx, mz);
+    var joyLen = Math.hypot(joy.x, joy.y);
+    if (len === 0 && joyLen > 0.12) {
+      // joystick: up = forward, right = strafe right; full deflection sprints
+      mx = fx * -joy.y + rx * joy.x;
+      mz = fz * -joy.y + rz * joy.x;
+      len = Math.hypot(mx, mz);
+      speed = joyLen > 0.92 ? SPRINT_SPEED : PLAYER_SPEED * Math.min(1, joyLen * 1.25);
+    }
     if (len > 0) {
       player.pos.x += (mx / len) * speed * dt;
       player.pos.z += (mz / len) * speed * dt;
     }
+    if (fireHeld) tryShoot();
     collideCircle(player.pos, PLAYER_RADIUS);
 
     player.mesh.position.copy(player.pos);

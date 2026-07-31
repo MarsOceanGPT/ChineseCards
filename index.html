@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>World War Mouse</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
-  body { font-family: 'Courier New', monospace; user-select: none; }
-  #game-canvas { display: block; width: 100%; height: 100%; }
+  body { font-family: 'Courier New', monospace; user-select: none; -webkit-user-select: none; touch-action: none; }
+  #game-canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
 
   .overlay {
-    position: absolute; inset: 0;
+    position: fixed; inset: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: rgba(10, 15, 10, 0.82);
     color: #e8ffe8; text-align: center; z-index: 20;
@@ -28,7 +28,28 @@
   .overlay button:active { transform: translateY(3px); box-shadow: 0 1px 0 #7a3b00; }
   .hidden { display: none !important; }
 
-  #hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+
+  /* --- touch controls --- */
+  #touch-ui { position: fixed; inset: 0; z-index: 15; pointer-events: none; }
+  #joystick {
+    position: absolute; left: 26px; bottom: 96px; width: 130px; height: 130px;
+    border-radius: 50%; border: 2px solid rgba(255,255,255,0.35);
+    background: rgba(0,0,0,0.25); pointer-events: auto; touch-action: none;
+  }
+  #joystick-knob {
+    position: absolute; left: 50%; top: 50%; width: 56px; height: 56px;
+    border-radius: 50%; background: rgba(255,255,255,0.45);
+    transform: translate(-50%, -50%);
+  }
+  #fire-btn {
+    position: absolute; right: 30px; bottom: 104px; width: 92px; height: 92px;
+    border-radius: 50%; border: 3px solid rgba(255,210,63,0.8);
+    background: rgba(180,60,30,0.55); color: #fff; font-size: 40px;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: auto; touch-action: none;
+  }
+  #fire-btn:active { background: rgba(255,120,60,0.8); }
 
   #crosshair {
     position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
@@ -79,6 +100,18 @@
     position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(255,0,0,0.45) 100%);
     opacity: 0; pointer-events: none; transition: opacity 0.1s;
   }
+
+  /* small screens (phones) */
+  @media (max-width: 700px) {
+    .overlay h1 { font-size: 32px; }
+    .overlay h2 { font-size: 24px; }
+    .overlay p { font-size: 14px; max-width: 92vw; }
+    #health-wrap { width: 160px; padding: 6px 8px; left: 12px; bottom: 12px; }
+    #ammo-wrap { right: 12px; bottom: 12px; padding: 6px 10px; font-size: 17px; }
+    #objective { font-size: 11px; top: 8px; white-space: nowrap; }
+    #king-hp-wrap { width: 80vw; top: 40px; }
+    #message { font-size: 14px; bottom: 220px; }
+  }
 </style>
 </head>
 <body>
@@ -103,13 +136,18 @@
   <div id="message"></div>
 </div>
 
+<div id="touch-ui" class="hidden">
+  <div id="joystick"><div id="joystick-knob"></div></div>
+  <div id="fire-btn">&#127878;</div>
+</div>
+
 <div id="start-screen" class="overlay">
   <h1>WORLD WAR MOUSE</h1>
   <p>You are a mouse soldier. The cat army has invaded — tanks shaped like cats
   with firework cannons in their mouths, deploying cat troopers across the field.</p>
   <p>Scavenge <b style="color:#ff9d5c">fireworks</b> scattered on the map and fire them at the cats.
   Fight your way to the castle and defeat the <b style="color:#ffd23f">CAT KING</b>.</p>
-  <p class="keys">WASD — move &nbsp;|&nbsp; MOUSE — aim &nbsp;|&nbsp; CLICK — fire &nbsp;|&nbsp; SHIFT — sprint</p>
+  <p class="keys" id="controls-line">WASD — move &nbsp;|&nbsp; MOUSE / TRACKPAD — aim &nbsp;|&nbsp; CLICK or SPACE — fire &nbsp;|&nbsp; SHIFT — sprint</p>
   <button id="start-btn">CLICK TO ENLIST</button>
 </div>
 
