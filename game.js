@@ -332,6 +332,7 @@
     pos: new THREE.Vector3(0, 0, 92),
     hp: PLAYER_MAX_HP,
     ammo: 0,
+    velX: 0, velZ: 0,
     yaw: 0,           // model faces -z natively; yaw 0 faces the castle
     lastHurt: -10,
     fireCooldown: 0
@@ -731,7 +732,7 @@
   function applyAim(dx, dy, sens) {
     player.yaw -= dx * sens;
     pitch += dy * sens;
-    pitch = Math.max(-0.45, Math.min(0.85, pitch));
+    pitch = Math.max(-0.55, Math.min(0.9, pitch));
   }
   document.addEventListener('mousemove', function (e) {
     if (!pointerLocked || state !== 'playing') return;
@@ -751,8 +752,10 @@
     dragAim.x = e.clientX; dragAim.y = e.clientY;
     applyAim(dx, dy, 0.0045);
   });
-  document.addEventListener('mouseup', function () {
-    if (dragAim && !pointerLocked && state === 'playing' && dragAim.moved < 6) tryShoot();
+  document.addEventListener('mouseup', function (e) {
+    if (dragAim && !pointerLocked && state === 'playing' && dragAim.moved < 6) {
+      tryShoot(enemyTargetAt(e.clientX, e.clientY));
+    }
     dragAim = null;
   });
 
@@ -762,12 +765,12 @@
   var knobEl = document.getElementById('joystick-knob');
   var fireBtn = document.getElementById('fire-btn');
   var joy = { id: null, baseX: 0, baseY: 0, x: 0, y: 0 };   // x,y in [-1,1]
-  var aimTouch = { id: null, lastX: 0, lastY: 0 };
+  var aimTouch = { id: null, lastX: 0, lastY: 0, moved: 0, startT: 0 };
   var fireHeld = false;
 
   if (IS_TOUCH) {
     var controlsLine = document.getElementById('controls-line');
-    if (controlsLine) controlsLine.textContent = 'LEFT STICK — move  |  DRAG RIGHT SIDE — aim  |  🎆 BUTTON — fire';
+    if (controlsLine) controlsLine.textContent = 'LEFT STICK — move  |  DRAG — aim  |  TAP A CAT — fire at it  |  🎆 — fire';
 
     joystickEl.addEventListener('touchstart', function (e) {
       e.preventDefault();
@@ -794,6 +797,7 @@
         if (aimTouch.id === null) {
           aimTouch.id = t.identifier;
           aimTouch.lastX = t.clientX; aimTouch.lastY = t.clientY;
+          aimTouch.moved = 0; aimTouch.startT = performance.now();
         }
       }
     }, { passive: false });
@@ -810,7 +814,8 @@
           joy.x = dx / max; joy.y = dy / max;
           knobEl.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
         } else if (t.identifier === aimTouch.id) {
-          applyAim(t.clientX - aimTouch.lastX, t.clientY - aimTouch.lastY, 0.006);
+          aimTouch.moved += Math.abs(t.clientX - aimTouch.lastX) + Math.abs(t.clientY - aimTouch.lastY);
+          applyAim(t.clientX - aimTouch.lastX, t.clientY - aimTouch.lastY, 0.004);
           aimTouch.lastX = t.clientX; aimTouch.lastY = t.clientY;
         }
       }
@@ -823,14 +828,49 @@
           joy.id = null; joy.x = 0; joy.y = 0;
           knobEl.style.transform = 'translate(-50%, -50%)';
         }
-        if (t.identifier === aimTouch.id) aimTouch.id = null;
+        if (t.identifier === aimTouch.id) {
+          // quick tap on a cat = fire a rocket straight at it
+          if (state === 'playing' && aimTouch.moved < 14 && performance.now() - aimTouch.startT < 400) {
+            var target = enemyTargetAt(t.clientX, t.clientY);
+            if (target) tryShoot(target);
+          }
+          aimTouch.id = null;
+        }
       }
     };
     document.addEventListener('touchend', endTouch);
     document.addEventListener('touchcancel', endTouch);
   }
 
-  function tryShoot() {
+  // find an enemy under (or near) a screen point; returns a world-space aim target
+  var raycaster = new THREE.Raycaster();
+  function enemyTargetAt(clientX, clientY) {
+    var ndc = new THREE.Vector2(
+      (clientX / window.innerWidth) * 2 - 1,
+      -(clientY / window.innerHeight) * 2 + 1
+    );
+    raycaster.setFromCamera(ndc, camera);
+    var meshes = [];
+    tanks.forEach(function (t) { if (t.alive) meshes.push(t.mesh); });
+    soldiers.forEach(function (s) { meshes.push(s.mesh); });
+    var hits = raycaster.intersectObjects(meshes, true);
+    if (hits.length) return hits[0].point.clone();
+    // near-miss assist: aim at the enemy whose center is closest on screen
+    var best = null, bestD = 90;
+    function consider(x, y, z) {
+      var v = new THREE.Vector3(x, y, z).project(camera);
+      if (v.z > 1) return;
+      var sx = (v.x + 1) / 2 * window.innerWidth;
+      var sy = (-v.y + 1) / 2 * window.innerHeight;
+      var d = Math.hypot(sx - clientX, sy - clientY);
+      if (d < bestD) { bestD = d; best = new THREE.Vector3(x, y, z); }
+    }
+    tanks.forEach(function (t) { if (t.alive) consider(t.x, 2.4 * t.scale, t.z); });
+    soldiers.forEach(function (s) { consider(s.pos.x, 1.1, s.pos.z); });
+    return best;
+  }
+
+  function tryShoot(targetPos) {
     if (player.fireCooldown > 0) return;
     if (player.ammo <= 0) {
       showMessage('No fireworks! Find more on the battlefield.', 1.6);
@@ -838,13 +878,30 @@
     }
     player.ammo--;
     player.fireCooldown = 0.45;
-    var dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
     var muzzle = player.pos.clone().add(new THREE.Vector3(0, 1.5, 0));
-    var target = camera.position.clone().add(dir.clone().multiplyScalar(120));
-    var shootDir = target.sub(muzzle).normalize();
+    var shootDir;
+    if (!targetPos) {
+      // aim assist: snap to an enemy near the crosshair
+      targetPos = enemyTargetAt(window.innerWidth / 2, window.innerHeight / 2);
+    }
+    if (targetPos) {
+      shootDir = targetPos.clone().sub(muzzle).normalize();
+    } else {
+      var dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      var far = camera.position.clone().add(dir.multiplyScalar(120));
+      shootDir = far.sub(muzzle).normalize();
+    }
     muzzle.add(shootDir.clone().multiplyScalar(1.0));
     fireProjectile(muzzle, shootDir, true);
+    // launch spray from the muzzle
+    for (var k = 0; k < 18; k++) {
+      var sprayDir = shootDir.clone().add(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8
+      )).normalize().multiplyScalar(4 + Math.random() * 7);
+      tmpColor.setHSL(0.07 + Math.random() * 0.08, 1, 0.55 + Math.random() * 0.35);
+      spawnParticle(muzzle.clone(), sprayDir, tmpColor.clone(), 0.35 + Math.random() * 0.3, 7);
+    }
     sfx.shoot();
     shake = Math.min(shake + 0.08, 0.5);
     updateHud();
@@ -974,12 +1031,16 @@
       mx = fx * -joy.y + rx * joy.x;
       mz = fz * -joy.y + rz * joy.x;
       len = Math.hypot(mx, mz);
-      speed = joyLen > 0.92 ? SPRINT_SPEED : PLAYER_SPEED * Math.min(1, joyLen * 1.25);
+      speed = joyLen > 0.92 ? SPRINT_SPEED : PLAYER_SPEED * Math.min(1, joyLen * 1.15);
     }
-    if (len > 0) {
-      player.pos.x += (mx / len) * speed * dt;
-      player.pos.z += (mz / len) * speed * dt;
-    }
+    // ease velocity toward the input so movement ramps instead of snapping
+    var tvx = len > 0 ? (mx / len) * speed : 0;
+    var tvz = len > 0 ? (mz / len) * speed : 0;
+    var ease = 1 - Math.exp(-9 * dt);
+    player.velX += (tvx - player.velX) * ease;
+    player.velZ += (tvz - player.velZ) * ease;
+    player.pos.x += player.velX * dt;
+    player.pos.z += player.velZ * dt;
     if (fireHeld) tryShoot();
     collideCircle(player.pos, PLAYER_RADIUS);
 
@@ -987,7 +1048,8 @@
     player.mesh.rotation.y = player.yaw;
     player.mesh.userData.launcher.visible = player.ammo > 0;
     // little hop while running
-    player.mesh.position.y = len > 0 ? Math.abs(Math.sin(elapsed * 10)) * 0.12 : 0;
+    var moving = Math.hypot(player.velX, player.velZ) > 1;
+    player.mesh.position.y = moving ? Math.abs(Math.sin(elapsed * 10)) * 0.12 : 0;
 
     player.fireCooldown = Math.max(0, player.fireCooldown - dt);
 
@@ -996,23 +1058,23 @@
       player.hp = Math.min(PLAYER_MAX_HP, player.hp + 2.5 * dt);
     }
 
-    // camera
-    var camDist = 6.5, camH = 2.2;
-    var cx = Math.sin(player.yaw) * Math.cos(pitch);
-    var cz = Math.cos(player.yaw) * Math.cos(pitch);
-    var cy = Math.sin(pitch);
-    camera.position.set(
-      player.pos.x + cx * camDist,
-      player.pos.y + 1.6 + cy * camDist + camH * Math.cos(pitch),
-      player.pos.z + cz * camDist
-    );
+    // over-shoulder camera: crosshair follows the true aim direction
+    // (pitch 0 = level with the horizon, positive pitch = look down)
+    var camDist = 6.5;
+    var cosP = Math.cos(pitch), sinP = Math.sin(pitch);
+    var ax = -Math.sin(player.yaw) * cosP, ay = -sinP, az = -Math.cos(player.yaw) * cosP;
+    var rvx = Math.cos(player.yaw), rvz = -Math.sin(player.yaw);
+    var hx = player.pos.x + rvx * 0.9;
+    var hy = player.pos.y + 1.9;
+    var hz = player.pos.z + rvz * 0.9;
+    camera.position.set(hx - ax * camDist, hy - ay * camDist + 0.5, hz - az * camDist);
     if (camera.position.y < 0.4) camera.position.y = 0.4;
     if (shake > 0) {
       camera.position.x += (Math.random() - 0.5) * shake;
       camera.position.y += (Math.random() - 0.5) * shake;
       shake = Math.max(0, shake - dt * 1.5);
     }
-    camera.lookAt(player.pos.x, player.pos.y + 1.6 + Math.sin(pitch) * -4, player.pos.z);
+    camera.lookAt(hx + ax * 12, hy + ay * 12, hz + az * 12);
   }
 
   function updatePickups(dt) {
@@ -1129,11 +1191,19 @@
       p.mesh.position.addScaledVector(p.vel, dt);
       var pos = p.mesh.position;
 
-      // spark trail
-      tmpColor.setHSL(p.friendly ? 0.08 : 0.0, 1, 0.6);
-      spawnParticle(pos.clone(),
-        new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2),
-        tmpColor.clone(), 0.35, 2);
+      // firework spark spray: a shower of embers streaming behind the rocket
+      var sparkCount = p.friendly ? 4 : 2;
+      for (var sp = 0; sp < sparkCount; sp++) {
+        var along = pos.clone().addScaledVector(p.vel, -dt * Math.random()); // fill the gap between frames
+        var backVel = p.vel.clone().multiplyScalar(-0.06).add(new THREE.Vector3(
+          (Math.random() - 0.5) * 3.5, (Math.random() - 0.5) * 3.5, (Math.random() - 0.5) * 3.5
+        ));
+        var roll = Math.random();
+        if (roll < 0.55) tmpColor.setHSL(0.07 + Math.random() * 0.06, 1, 0.55 + Math.random() * 0.2);      // gold/orange
+        else if (roll < 0.85) tmpColor.setHSL(0.12, 0.9, 0.75);                                             // bright yellow
+        else tmpColor.setRGB(1, 1, 1);                                                                      // white-hot
+        spawnParticle(along, backVel, tmpColor.clone(), 0.35 + Math.random() * 0.35, 6);
+      }
 
       var boom = false;
       if (p.life <= 0 || pos.y <= 0.15) boom = true;
@@ -1216,5 +1286,5 @@
   requestAnimationFrame(loop);
 
   // small debug/testing handle
-  window.WWM = { player: player, tanks: tanks, soldiers: soldiers, king: king, getState: function () { return state; } };
+  window.WWM = { player: player, tanks: tanks, soldiers: soldiers, king: king, camera: camera, getState: function () { return state; } };
 })();
