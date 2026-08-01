@@ -42,9 +42,12 @@ fire at it, plus on-screen fire and jump buttons.
 - **Parkour** up the crates and ledges on the side of the house to reach
   the rooftop — the Attic Conference of Mouse World Leaders has a gift for
   anyone who makes the climb.
-- **Win** by reaching the castle at the far end of the battlefield and
-  destroying the Cat King (the big crowned tank). Lose if your HP hits
-  zero — or the Mouse King's does.
+- **The war escalates over three levels.** Level 1 is a skirmish against
+  a cat scout patrol. Level 2 is the full armored invasion, with raiders
+  hunting the Mouse King. In level 3 the CAT KING himself arrives at the
+  castle with his imperial guard and an escort column.
+- **Win** by destroying the Cat King (the big crowned tank) in level 3.
+  Lose if your HP hits zero — or the Mouse King's does.
 
 ## Tech
 
