@@ -44,7 +44,11 @@
       loseCaught: 'You were captured by the cats. The mouse resistance needs you — try again!',
       loseKing: 'The Mouse King has fallen! The cats have won the war.',
       stTime: 'Battle time', stTanks: 'Tanks destroyed', stCats: 'Cats defeated',
-      stAccuracy: 'Accuracy', stScore: 'Final score', stBest: 'New best score!'
+      stAccuracy: 'Accuracy', stScore: 'Final score', stBest: 'New best score!',
+      diffLabel: 'DIFFICULTY', diffEasy: 'EASY', diffNormal: 'NORMAL', diffHard: 'HARD',
+      combo2: 'DOUBLE KILL! +100', combo3: 'TRIPLE KILL! +300', combo4: 'RAMPAGE!!! +500',
+      critText: 'CRIT!', squashText: 'SQUASH!',
+      msgEnrage: '😾 The CAT KING is ENRAGED! His cannon burns hot!'
     },
     zh: {
       subtitle: '世 界 大 战 鼠',
@@ -84,7 +88,11 @@
       loseCaught: '你被猫抓住了。鼠国需要你——再试一次!',
       loseKing: '鼠国王倒下了……猫赢得了战争。',
       stTime: '战斗用时', stTanks: '击毁坦克', stCats: '击败猫兵',
-      stAccuracy: '命中率', stScore: '最终得分', stBest: '新纪录!'
+      stAccuracy: '命中率', stScore: '最终得分', stBest: '新纪录!',
+      diffLabel: '难度', diffEasy: '简单', diffNormal: '普通', diffHard: '困难',
+      combo2: '双杀!+100', combo3: '三连杀!+300', combo4: '超神了!!!+500',
+      critText: '暴击!', squashText: '踩扁!',
+      msgEnrage: '😾 猫国王狂暴了!火炮全开!'
     }
   };
   var LANG = (function () {
@@ -101,6 +109,19 @@
     for (var i = 1; i < arguments.length; i++) s = s.replace('{' + (i - 1) + '}', arguments[i]);
     return s;
   }
+
+  // ---------- difficulty ----------
+  var DIFF_TABLE = {
+    easy: { dmg: 0.55, reload: 1.35, regen: 1.8 },
+    normal: { dmg: 1, reload: 1, regen: 1 },
+    hard: { dmg: 1.45, reload: 0.78, regen: 0.7 }
+  };
+  var difficulty = 'normal';
+  try {
+    var savedDiff = localStorage.getItem('wwm-diff');
+    if (DIFF_TABLE[savedDiff]) difficulty = savedDiff;
+  } catch (e) { }
+  function DIFF() { return DIFF_TABLE[difficulty]; }
 
   // ---------- constants ----------
   var MAP_X = 65;
@@ -1121,6 +1142,7 @@
     },
     land: function (vol) { playNoise(0.12, 0.3 * vol, 500); playTone(130, 60, 0.12, 0.18 * vol, 'sine'); },
     heart: function () { playTone(75, 55, 0.09, 0.28, 'sine'); playTone(72, 52, 0.09, 0.2, 'sine', 0.17); },
+    squash: function () { playNoise(0.12, 0.32, 500); playTone(320, 70, 0.2, 0.2, 'square'); },
     horn: function () {
       playBend([[0, 190], [0.35, 250], [1, 110]], 0.9, 0.18, 'sawtooth');
       playBend([[0, 95], [0.35, 125], [1, 55]], 0.9, 0.14, 'square');
@@ -1593,8 +1615,26 @@
     if (worldPos) spawnFloatText('+' + pts, worldPos);
   }
 
+  // combo kills within a short window trigger escalating bonuses
+  var comboCount = 0, comboTimer = 0;
+  var comboEl = document.getElementById('combo-banner');
+  function registerKill() {
+    comboCount = comboTimer > 0 ? comboCount + 1 : 1;
+    comboTimer = 2.5;
+    if (comboCount >= 2) {
+      var key = comboCount === 2 ? 'combo2' : comboCount === 3 ? 'combo3' : 'combo4';
+      addScore(comboCount === 2 ? 100 : comboCount === 3 ? 300 : 500);
+      comboEl.textContent = T(key);
+      comboEl.classList.remove('show');
+      void comboEl.offsetWidth;
+      comboEl.classList.add('show');
+      sfx.pickup();
+    }
+  }
+
   function startLevel(n) {
     level = n;
+    setMood(n);
     if (state === 'playing') showBanner(T('banner' + n));
     if (n === 1) {
       setObjective('obj1');
@@ -1628,6 +1668,11 @@
       sfx.horn();
       sfx.meow();
       setTimeout(function () { sfx.horn(); }, 400);
+      if (state === 'playing') {
+        // cinematic: letterboxed camera push toward the Cat King's arrival
+        cineT = 4.2;
+        document.body.classList.add('cine');
+      }
     }
     updateHud();
   }
@@ -1715,6 +1760,20 @@
     t.hp -= dmg;
     t.flash = 0.15;
     setHpBar(t.bar, t.hp / t.maxHp);
+    // the Cat King enrages at half health: second phase!
+    if (t.isKing && t.alive && !t.enraged && t.hp > 0 && t.hp <= t.maxHp / 2) {
+      t.enraged = true;
+      showMessage(T('msgEnrage'), 4);
+      sfx.horn();
+      sfx.meow();
+      shake = Math.min(shake + 0.5, 0.8);
+      var rage = new THREE.PointLight(0xff3020, 2.2, 26);
+      rage.position.y = 4;
+      t.mesh.add(rage);
+      spawnSoldier(-3, CASTLE_Z + 2, null, { guard: true });
+      spawnSoldier(3, CASTLE_Z + 2, null, { guard: true });
+      fireworkExplosion(new THREE.Vector3(t.x, 5, t.z), true);
+    }
     if (t.hp <= 0 && t.alive) {
       t.alive = false;
       var p = new THREE.Vector3(t.x, 2.5 * t.scale, t.z);
@@ -1728,6 +1787,8 @@
       if (ci >= 0) obstacles.splice(ci, 1);
       stats.tanks++;
       addScore(t.isKing ? 2000 : 250, p);
+      registerKill();
+      hitstop = Math.max(hitstop, t.isKing ? 1.0 : 0.09);
       if (t.isKing) winGame();
       else {
         var left = tanks.filter(function (x) { return x.alive && !x.isKing; }).length;
@@ -1755,6 +1816,8 @@
         fireworkExplosion(s.pos.clone().setY(1.2), false);
         stats.cats++;
         addScore(s.kind === 'catguard' ? 150 : 50, s.pos.clone().setY(1.6));
+        spawnFloatText('😿', s.pos.clone().setY(2.6), '#fff');
+        registerKill();
         if (s.fromTank) s.fromTank.mySoldiers--;
         scene.remove(s.mesh);
         soldiers.splice(idx, 1);
@@ -1808,6 +1871,7 @@
 
   function explode(pos, friendly) {
     fireworkExplosion(pos, !friendly);
+    if (pos.y < 2.2) addScorch(pos.x, pos.z, 1.6 + Math.random() * 1.0);
     var hearDist = Math.hypot(pos.x - player.pos.x, pos.z - player.pos.z);
     sfx.explode(Math.max(0.12, 1 - hearDist / 80));
     shake = Math.min(shake + (friendly ? 0.15 : 0.3), 0.6);
@@ -1817,7 +1881,16 @@
       tanks.forEach(function (t) {
         if (!t.alive) return;
         var dd = Math.hypot(pos.x - t.x, pos.z - t.z);
-        if (dd < ROCKET_SPLASH + t.scale * 2) { damageTank(t, ROCKET_DAMAGE); hitSomething = true; }
+        if (dd < ROCKET_SPLASH + t.scale * 2) {
+          // rear armor is weak — hits behind the tank crit for double damage
+          var dmg = ROCKET_DAMAGE;
+          if (pos.z > t.z + 1.2 * t.scale && Math.abs(pos.x - t.x) < 2.6 * t.scale) {
+            dmg *= 2;
+            spawnFloatText('💥 ' + T('critText'), new THREE.Vector3(t.x, 3.6 * t.scale, t.z), '#ff8f6b');
+          }
+          damageTank(t, dmg);
+          hitSomething = true;
+        }
       });
       for (k = soldiers.length - 1; k >= 0; k--) {
         var s = soldiers[k];
@@ -2063,6 +2136,7 @@
     }
     muzzle.add(shootDir.clone().multiplyScalar(1.0));
     fireProjectile(muzzle, shootDir, true, isSeeker);
+    fovKick = 4;
     for (var k = 0; k < 18; k++) {
       var sprayDir = shootDir.clone().add(new THREE.Vector3(
         (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8
@@ -2108,7 +2182,7 @@
 
   function hurtPlayer(dmg) {
     if (state !== 'playing') return;
-    player.hp -= dmg;
+    player.hp -= Math.max(1, Math.round(dmg * DIFF().dmg));
     player.lastHurt = elapsed;
     sfx.hurt();
     damageFlash.style.opacity = '1';
@@ -2216,7 +2290,63 @@
   var atticDone = false;
   var stepSoundT = 0, climbSoundT = 0;
   var heartT = 0, orbitT = 0;
+  var hitstop = 0, fovKick = 0, cineT = 0;
   var vignetteEl = document.getElementById('vignette');
+
+  // per-level sky mood: clear noon -> golden sunset -> ominous blood dusk
+  var MOODS = {
+    1: { sky: 0x8fc4ea, fog: 0x9fcdec, sun: 1.25, hemi: 0.55 },
+    2: { sky: 0xe8a35f, fog: 0xdca671, sun: 1.05, hemi: 0.45 },
+    3: { sky: 0x4a2336, fog: 0x63303e, sun: 0.85, hemi: 0.32 }
+  };
+  var moodSky = new THREE.Color(MOODS[1].sky);
+  var moodFog = new THREE.Color(MOODS[1].fog);
+  var moodSun = MOODS[1].sun, moodHemi = MOODS[1].hemi;
+  function setMood(n) {
+    var m = MOODS[n] || MOODS[1];
+    moodSky.set(m.sky);
+    moodFog.set(m.fog);
+    moodSun = m.sun;
+    moodHemi = m.hemi;
+  }
+  function updateMood(dt) {
+    var f = Math.min(1, dt * 0.5);
+    scene.background.lerp(moodSky, f);
+    scene.fog.color.lerp(moodFog, f);
+    sun.intensity += (moodSun - sun.intensity) * f;
+    hemi.intensity += (moodHemi - hemi.intensity) * f;
+  }
+
+  // scorch marks left by explosions
+  var scorches = [], scorchIdx = 0, MAX_SCORCH = 12;
+  function addScorch(x, z, r) {
+    var s;
+    if (scorches.length < MAX_SCORCH) {
+      var mesh = new THREE.Mesh(
+        new THREE.CircleGeometry(1, 18),
+        new THREE.MeshBasicMaterial({ color: 0x0d0906, transparent: true, opacity: 0.45, depthWrite: false })
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      scene.add(mesh);
+      s = { mesh: mesh, life: 0 };
+      scorches.push(s);
+    } else {
+      s = scorches[scorchIdx++ % MAX_SCORCH];
+    }
+    s.mesh.position.set(x, 0.045 + (scorchIdx % 6) * 0.002, z);
+    s.mesh.scale.setScalar(r);
+    s.life = 9;
+    s.mesh.visible = true;
+  }
+  function updateScorches(dt) {
+    for (var k = 0; k < scorches.length; k++) {
+      var s = scorches[k];
+      if (s.life <= 0) continue;
+      s.life -= dt;
+      s.mesh.material.opacity = Math.min(0.45, s.life / 9 * 0.45);
+      if (s.life <= 0) s.mesh.visible = false;
+    }
+  }
 
   function updatePlayer(dt) {
     var speed = (keys.ShiftLeft || keys.ShiftRight) ? SPRINT_SPEED : PLAYER_SPEED;
@@ -2283,6 +2413,24 @@
       var fallSpeed = -player.velY;
       player.velY -= GRAVITY * dt;
       player.pos.y += player.velY * dt;
+
+      // goomba stomp: land on a cat soldier to squash it flat
+      if (player.velY < -3) {
+        for (var si = soldiers.length - 1; si >= 0; si--) {
+          var so = soldiers[si];
+          var dxs = player.pos.x - so.pos.x, dzs = player.pos.z - so.pos.z;
+          if (dxs * dxs + dzs * dzs < 1.2 && player.pos.y > 0.7 && player.pos.y < 2.1) {
+            spawnFloatText(T('squashText') + ' 🐾', so.pos.clone().setY(2.4), '#aef29a');
+            damageSoldierObj(so, so.kind === 'catguard' ? 45 : 9999);
+            if (so.kind === 'catguard') sfx.clang();
+            player.velY = 7.5;
+            sfx.squash();
+            shake = Math.min(shake + 0.15, 0.5);
+            break;
+          }
+        }
+      }
+
       var g = groundHeightAt(player.pos.x, player.pos.z, PLAYER_RADIUS, player.pos.y);
       if (player.pos.y <= g) {
         player.pos.y = g;
@@ -2313,7 +2461,7 @@
 
     player.fireCooldown = Math.max(0, player.fireCooldown - dt);
     if (player.hp < PLAYER_MAX_HP && elapsed - player.lastHurt > 6) {
-      player.hp = Math.min(PLAYER_MAX_HP, player.hp + 2.5 * dt);
+      player.hp = Math.min(PLAYER_MAX_HP, player.hp + 2.5 * DIFF().regen * dt);
     }
 
     // attic conference easter egg
@@ -2349,6 +2497,17 @@
       shake = Math.max(0, shake - dt * 1.5);
     }
     camera.lookAt(hx + ax * 12, hy + ay * 12, hz + az * 12);
+
+    // the Cat King's arrival cinematic overrides the camera
+    if (cineT > 0 && king) {
+      var prog = 1 - cineT / 4.2;
+      camera.position.set(
+        Math.sin(prog * 1.2) * 14,
+        11 - prog * 2,
+        CASTLE_Z + 44 - prog * 10
+      );
+      camera.lookAt(king.x, 7, king.z);
+    }
   }
 
   function consumePickup(p) {
@@ -2412,6 +2571,15 @@
           if (o.isMesh && o.material.emissive) o.material.emissiveIntensity = t.flash > 0 ? 3 : 1;
         });
       }
+      // battle damage: below half health the tank belches smoke
+      if (t.hp < t.maxHp * 0.5 && Math.random() < dt * 7) {
+        tmpColor.setHSL(0.08, 0.3, 0.14);
+        spawnParticle(
+          new THREE.Vector3(t.x + (Math.random() - 0.5) * 2 * t.scale, 2.4 * t.scale, t.z + (Math.random() - 0.5) * 2 * t.scale),
+          new THREE.Vector3((Math.random() - 0.5) * 0.5, 1.6 + Math.random(), (Math.random() - 0.5) * 0.5),
+          tmpColor.clone(), 1.5, { gravity: -0.8, drag: 1, size: 1.0, endSize: 2.8, fade: 1.6 });
+      }
+
       var dx = player.pos.x - t.x, dz = player.pos.z - t.z;
       var dist = Math.hypot(dx, dz);
       if (dist > (wrath ? 78 : t.range)) return;
@@ -2425,7 +2593,7 @@
 
       t.fireTimer -= dt;
       if (t.fireTimer <= 0 && Math.abs(diff) < 0.25) {
-        t.fireTimer = t.isKing ? 1.6 : t.reload + Math.random() * 0.6;
+        t.fireTimer = (t.isKing ? (t.enraged ? 1.0 : 1.6) : t.reload + Math.random() * 0.6) * DIFF().reload;
         var muzzle = t.head.localToWorld(t.head.userData.muzzleLocal.clone());
         // tight aim, then a fanned volley of shells
         var aim = new THREE.Vector3(
@@ -2434,8 +2602,8 @@
           player.pos.z + (Math.random() - 0.5) * 1.2
         ).sub(muzzle).normalize();
         var up = new THREE.Vector3(0, 1, 0);
-        var shots = t.isKing ? 5 : 3;
-        var spreadTotal = t.isKing ? 0.22 : 0.11;
+        var shots = t.isKing ? (t.enraged ? 7 : 5) : 3;
+        var spreadTotal = t.isKing ? (t.enraged ? 0.34 : 0.22) : 0.11;
         for (var si = 0; si < shots; si++) {
           var off = (si / (shots - 1) - 0.5) * spreadTotal + (Math.random() - 0.5) * 0.02;
           fireProjectile(muzzle.clone(), aim.clone().applyAxisAngle(up, off), false);
@@ -2820,11 +2988,29 @@
   var lastTime = performance.now();
   function loop(now) {
     requestAnimationFrame(loop);
-    var dt = Math.min((now - lastTime) / 1000, 0.05);
+    var rawDt = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
+    var dt = rawDt;
+    if (hitstop > 0) {           // kill hitstop / boss slow-motion
+      hitstop -= rawDt;
+      dt = rawDt * 0.18;
+    }
+
+    // firing FOV kick
+    fovKick = Math.max(0, fovKick - rawDt * 22);
+    var wantFov = 70 + fovKick;
+    if (Math.abs(camera.fov - wantFov) > 0.01) {
+      camera.fov = wantFov;
+      camera.updateProjectionMatrix();
+    }
 
     if (state === 'playing') {
       elapsed += dt;
+      if (comboTimer > 0) comboTimer -= dt;
+      if (cineT > 0) {
+        cineT -= dt;
+        if (cineT <= 0) document.body.classList.remove('cine');
+      }
       if (levelTransition > 0) {
         levelTransition -= dt;
         if (levelTransition <= 0) startLevel(level + 1);
@@ -2856,7 +3042,13 @@
       orbitT += dt * 0.09;
       camera.position.set(Math.sin(orbitT) * 48, 15 + Math.sin(orbitT * 0.7) * 4, 52 + Math.cos(orbitT) * 48);
       camera.lookAt(0, 3, 55);
+      // distant celebration fireworks behind the title
+      if (Math.random() < dt * 0.6) {
+        fireworkExplosion(new THREE.Vector3((Math.random() - 0.5) * 90, 16 + Math.random() * 14, -20 + Math.random() * 90), Math.random() < 0.4);
+      }
     }
+    updateMood(dt);
+    updateScorches(dt);
     updateAmbient(dt);
     updateParticles(dt);
     updateRings(dt);
@@ -2893,6 +3085,22 @@
     try { localStorage.setItem('wwm-lang', LANG); } catch (e) { }
     applyLang();
   });
+
+  // difficulty selector
+  var diffBtns = document.querySelectorAll('.diff-btn');
+  function refreshDiffBtns() {
+    for (var k = 0; k < diffBtns.length; k++) {
+      diffBtns[k].classList.toggle('selected', diffBtns[k].getAttribute('data-diff') === difficulty);
+    }
+  }
+  for (var db = 0; db < diffBtns.length; db++) {
+    diffBtns[db].addEventListener('click', function () {
+      difficulty = this.getAttribute('data-diff');
+      try { localStorage.setItem('wwm-diff', difficulty); } catch (e) { }
+      refreshDiffBtns();
+    });
+  }
+  refreshDiffBtns();
 
   startLevel(1);
   applyLang();
