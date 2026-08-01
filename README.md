@@ -39,9 +39,10 @@ fire at it, plus on-screen fire and jump buttons.
 - **Allied mice** scavenge fireworks on their own and fire them at cats.
 - **Popcorn** in the house restores your HP, and HP slowly regenerates if
   you avoid damage for a few seconds.
-- **Parkour** up the crates and ledges on the side of the house to reach
-  the rooftop — the Attic Conference of Mouse World Leaders has a gift for
-  anyone who makes the climb.
+- **Climb the ladder** on the right-front corner of the house (walk into
+  it and hold a direction; jump to let go) to reach the rooftop — the
+  Attic Conference of Mouse World Leaders has a gift for anyone who makes
+  the climb.
 - **The war escalates over three levels.** Level 1 is a skirmish against
   a cat scout patrol. Level 2 is the full armored invasion, with raiders
   hunting the Mouse King. In level 3 the CAT KING himself arrives at the

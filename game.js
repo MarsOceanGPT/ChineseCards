@@ -22,6 +22,7 @@
   var ALLY_HP = 40;
   var MAX_SOLDIERS = 9;
   var HOUSE_X = 0, HOUSE_Z = 106;
+  var LADDER = { x: 13.0, z: 100, top: 6.15 };   // climbs the house's right-front corner
   var CASTLE_Z = -95;
 
   // ---------- deterministic rng for level layout ----------
@@ -481,17 +482,19 @@
     lamp.position.set(HOUSE_X, 4.6, HOUSE_Z);
     scene.add(lamp);
 
-    // parkour route up the right side: crate -> plank -> plank -> roof
-    makeCrate(HOUSE_X + 15.8, HOUSE_Z - 6.5, 1.4);
-    function ledge(x, z, h, w, d) {
-      var m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.35, d), woodDarkMat);
-      m.position.set(x, h - 0.175, z);
-      m.castShadow = true; m.receiveShadow = true;
-      scene.add(m);
-      addObstacleCollider(x, z, w / 2, d / 2, h);
+    // a sturdy wooden ladder up the right-front corner to the roof
+    var railMat = new THREE.MeshLambertMaterial({ color: 0x8a6234 });
+    [-0.55, 0.55].forEach(function (rz) {
+      var rail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 6.6, 0.12), railMat);
+      rail.position.set(HOUSE_X + 13.0, 3.3, HOUSE_Z - 6 + rz);
+      rail.castShadow = true;
+      scene.add(rail);
+    });
+    for (var rung = 0; rung < 11; rung++) {
+      var r = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 1.1), railMat);
+      r.position.set(HOUSE_X + 13.0, 0.5 + rung * 0.58, HOUSE_Z - 6);
+      scene.add(r);
     }
-    ledge(HOUSE_X + 14.6, HOUSE_Z - 3, 2.9, 2.6, 2.2);
-    ledge(HOUSE_X + 13.6, HOUSE_Z + 1.5, 4.4, 2.2, 2.2);
 
     // attic conference on the roof: table, banner, five mouse world leaders
     var table = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.3, 12), woodDarkMat);
@@ -1013,6 +1016,16 @@
       playTone(160, 90, 0.1, 0.15, 'sine');
     },
     jump: function () { playTone(350, 600, 0.15, 0.07, 'square'); },
+    step: function () { playNoise(0.045, 0.05, 700 + Math.random() * 300); },
+    creak: function () {
+      var up = Math.random() < 0.5;
+      playTone(up ? 170 : 230, up ? 240 : 160, 0.14, 0.09, 'triangle');
+    },
+    land: function (vol) { playNoise(0.12, 0.3 * vol, 500); playTone(130, 60, 0.12, 0.18 * vol, 'sine'); },
+    horn: function () {
+      playBend([[0, 190], [0.35, 250], [1, 110]], 0.9, 0.18, 'sawtooth');
+      playBend([[0, 95], [0.35, 125], [1, 55]], 0.9, 0.14, 'square');
+    },
     fanfare: function () {
       [[523, 0], [659, 0.16], [784, 0.32], [1047, 0.48], [784, 0.72], [1047, 0.88]].forEach(function (n) {
         playTone(n[0], n[0], 0.28, 0.13, 'square', n[1]);
@@ -1374,6 +1387,7 @@
       spawnTank(20, -62, { reload: 2.2, deploy: 8, cap: 3 });
       raidTimer = 26;
       player.hp = Math.min(PLAYER_MAX_HP, player.hp + 40);
+      sfx.horn();
       sfx.meow();
     } else if (n === 3) {
       setObjective('LEVEL 3 · THE CAT KING — storm the castle and end this war!');
@@ -1387,8 +1401,9 @@
       spawnTank(14, -78, { reload: 2.0, deploy: 7, cap: 3 });
       raidTimer = 35;
       player.hp = Math.min(PLAYER_MAX_HP, player.hp + 40);
+      sfx.horn();
       sfx.meow();
-      setTimeout(function () { sfx.meow(); }, 250);
+      setTimeout(function () { sfx.horn(); }, 400);
     }
     updateHud();
   }
@@ -1922,6 +1937,7 @@
   var elapsed = 0;
   var raidTimer = 40;
   var atticDone = false;
+  var stepSoundT = 0, climbSoundT = 0;
 
   function updatePlayer(dt) {
     var speed = (keys.ShiftLeft || keys.ShiftRight) ? SPRINT_SPEED : PLAYER_SPEED;
@@ -1940,33 +1956,72 @@
       len = Math.hypot(mx, mz);
       speed = joyLen > 0.92 ? SPRINT_SPEED : PLAYER_SPEED * Math.min(1, joyLen * 1.15);
     }
+    // snappy on the ground (no ice-skating), floatier only mid-air
+    var accel = player.grounded ? (len > 0 ? 13 : 20) : 5;
+    var ease = 1 - Math.exp(-accel * dt);
     var tvx = len > 0 ? (mx / len) * speed : 0;
     var tvz = len > 0 ? (mz / len) * speed : 0;
-    var ease = 1 - Math.exp(-9 * dt);
-    player.velX += (tvx - player.velX) * ease;
-    player.velZ += (tvz - player.velZ) * ease;
-    player.pos.x += player.velX * dt;
-    player.pos.z += player.velZ * dt;
-    collideCircle(player.pos, PLAYER_RADIUS);
 
-    // vertical: gravity, jumping, landing on crates / the roof
-    if (jumpQueued) {
-      if (player.grounded) {
-        player.velY = JUMP_V;
-        player.grounded = false;
-        sfx.jump();
-      }
-      jumpQueued = false;
-    }
-    player.velY -= GRAVITY * dt;
-    player.pos.y += player.velY * dt;
-    var g = groundHeightAt(player.pos.x, player.pos.z, PLAYER_RADIUS, player.pos.y);
-    if (player.pos.y <= g) {
-      player.pos.y = g;
+    // ladder to the attic: walk into it and hold any direction to climb;
+    // the mouse grips the rungs, so no sliding off — jump to let go
+    var onLadder = player.pos.y < LADDER.top - 0.05 &&
+      Math.abs(player.pos.x - LADDER.x) < 1.0 && Math.abs(player.pos.z - LADDER.z) < 1.1;
+    if (onLadder && (len > 0 || player.pos.y > 0.1) && !jumpQueued) {
       player.velY = 0;
+      player.velX = 0; player.velZ = 0;
+      var grip = Math.min(1, 10 * dt);
+      player.pos.x += (LADDER.x + 0.2 - player.pos.x) * grip;
+      player.pos.z += (LADDER.z - player.pos.z) * grip;
+      if (len > 0) {
+        player.pos.y += 3.4 * dt;
+        climbSoundT -= dt;
+        if (climbSoundT <= 0) { climbSoundT = 0.32; sfx.creak(); }
+      }
       player.grounded = true;
     } else {
-      player.grounded = false;
+      if (onLadder && jumpQueued) {
+        // let go of the ladder with a little hop away from the wall
+        player.velY = 3.5;
+        player.velX = 6;
+        jumpQueued = false;
+        sfx.jump();
+      }
+      player.velX += (tvx - player.velX) * ease;
+      player.velZ += (tvz - player.velZ) * ease;
+      player.pos.x += player.velX * dt;
+      player.pos.z += player.velZ * dt;
+      collideCircle(player.pos, PLAYER_RADIUS);
+
+      // vertical: gravity, jumping, landing on crates / the roof
+      if (jumpQueued) {
+        if (player.grounded) {
+          player.velY = JUMP_V;
+          player.grounded = false;
+          sfx.jump();
+        }
+        jumpQueued = false;
+      }
+      var fallSpeed = -player.velY;
+      player.velY -= GRAVITY * dt;
+      player.pos.y += player.velY * dt;
+      var g = groundHeightAt(player.pos.x, player.pos.z, PLAYER_RADIUS, player.pos.y);
+      if (player.pos.y <= g) {
+        player.pos.y = g;
+        player.velY = 0;
+        if (!player.grounded && fallSpeed > 7) sfx.land(Math.min(1, fallSpeed / 16));
+        player.grounded = true;
+      } else {
+        player.grounded = false;
+      }
+    }
+
+    // footsteps
+    if (player.grounded && Math.hypot(player.velX, player.velZ) > 4) {
+      stepSoundT -= dt;
+      if (stepSoundT <= 0) {
+        stepSoundT = speed > PLAYER_SPEED ? 0.22 : 0.3;
+        sfx.step();
+      }
     }
 
     if (fireHeld) tryShoot();
@@ -2150,6 +2205,7 @@
     }
     if (wrath && !wasWrath) {
       showMessage('😾 You dare approach the CAT KING?! Every cat on the field is coming for YOU!', 4);
+      sfx.horn();
       sfx.meow();
       setTimeout(function () { sfx.meow(); }, 220);
       setTimeout(function () { sfx.meow(); }, 480);
@@ -2180,6 +2236,13 @@
   }
 
   window.addEventListener('blur', function () { keys = {}; });
+
+  // iOS/Safari can suspend the audio context at any time — resume on any gesture
+  ['click', 'touchend', 'keydown'].forEach(function (ev) {
+    document.addEventListener(ev, function () {
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    });
+  });
 
   function updateCatUnits(dt) {
     for (var k = soldiers.length - 1; k >= 0; k--) {
