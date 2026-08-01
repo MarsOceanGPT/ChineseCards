@@ -1,46 +1,196 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>World War Mouse</title>
+<title>World War Mouse · 世界大战鼠</title>
+<meta name="description" content="A 3D battle game: a mouse soldier armed with fireworks defends the Mouse King and storms the Cat King's castle. 小老鼠士兵用烟花大战猫猫军团!">
+<meta name="theme-color" content="#101726">
+<meta property="og:type" content="website">
+<meta property="og:title" content="World War Mouse · 世界大战鼠 🐭🎆🐱">
+<meta property="og:description" content="Fireworks vs. cat tanks! Defend the Mouse King, climb to the Attic Conference, and defeat the Cat King. 快来挑战三关猫鼠大战!">
+<meta property="og:image" content="https://marsoceangpt.github.io/ChineseCards/og-image.png">
+<meta property="og:url" content="https://marsoceangpt.github.io/ChineseCards/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐭</text></svg>">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #101726; }
   body { font-family: 'Courier New', monospace; user-select: none; -webkit-user-select: none; touch-action: none; }
   #game-canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
+
+  :root {
+    --panel: rgba(12, 18, 34, 0.68);
+    --panel-border: rgba(160, 190, 255, 0.22);
+    --gold: #ffd23f;
+    --blue: #9ecbff;
+  }
 
   .overlay {
     position: fixed; inset: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: rgba(10, 15, 10, 0.82);
-    color: #e8ffe8; text-align: center; z-index: 20;
+    background: radial-gradient(ellipse at center, rgba(10, 16, 32, 0.55) 0%, rgba(6, 10, 22, 0.88) 100%);
+    color: #eef4ff; text-align: center; z-index: 20; padding: 20px;
   }
-  .overlay h1 { font-size: 52px; letter-spacing: 4px; margin-bottom: 8px; color: #ffd23f; text-shadow: 3px 3px 0 #7a3b00; }
+  .overlay h1 {
+    font-size: 54px; letter-spacing: 5px; margin-bottom: 2px;
+    background: linear-gradient(180deg, #fff2b0 0%, #ffd23f 45%, #ff8f3f 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 3px 0 rgba(122, 59, 0, 0.9)) drop-shadow(0 0 22px rgba(255, 180, 60, 0.35));
+    animation: titleGlow 2.6s ease-in-out infinite;
+  }
+  @keyframes titleGlow {
+    0%, 100% { filter: drop-shadow(0 3px 0 rgba(122,59,0,0.9)) drop-shadow(0 0 14px rgba(255,180,60,0.25)); }
+    50% { filter: drop-shadow(0 3px 0 rgba(122,59,0,0.9)) drop-shadow(0 0 30px rgba(255,200,80,0.55)); }
+  }
+  .overlay .subtitle { font-size: 22px; color: var(--blue); letter-spacing: 10px; margin-bottom: 14px; }
+  .overlay .vs-line { font-size: 30px; margin-bottom: 14px; letter-spacing: 6px; }
   .overlay h2 { font-size: 34px; margin-bottom: 16px; }
-  .overlay p { font-size: 17px; line-height: 1.7; max-width: 640px; margin-bottom: 10px; }
-  .overlay .keys { color: #9fd89f; }
-  .overlay button, .overlay .click-hint {
-    margin-top: 22px; font-family: inherit; font-size: 20px; padding: 12px 34px;
-    background: #ffd23f; color: #3a2500; border: none; cursor: pointer;
-    box-shadow: 0 4px 0 #7a3b00; letter-spacing: 2px;
+  .overlay p { font-size: 16px; line-height: 1.75; max-width: 660px; margin-bottom: 8px; }
+  .overlay .keys { color: #9fd89f; font-size: 14px; }
+  .overlay button {
+    margin-top: 18px; font-family: inherit; font-size: 21px; padding: 13px 42px;
+    background: linear-gradient(180deg, #ffe27a, #ffc21e); color: #3a2500; border: none; cursor: pointer;
+    box-shadow: 0 5px 0 #7a3b00, 0 8px 24px rgba(0,0,0,0.5); letter-spacing: 3px; border-radius: 10px;
+    transition: transform 0.08s;
   }
-  .overlay button:active { transform: translateY(3px); box-shadow: 0 1px 0 #7a3b00; }
+  .overlay button:hover { transform: translateY(-1px); }
+  .overlay button:active { transform: translateY(4px); box-shadow: 0 1px 0 #7a3b00; }
+  .overlay .minor-btn {
+    margin-top: 12px; font-size: 14px; padding: 8px 22px;
+    background: rgba(255,255,255,0.1); color: #cfe0ff; box-shadow: none;
+    border: 1px solid var(--panel-border);
+  }
+  #best-line { color: var(--gold); font-size: 15px; margin-top: 14px; letter-spacing: 1px; }
+  #lang-btn {
+    position: absolute; top: 18px; right: 18px; font-size: 14px; padding: 8px 16px;
+    background: rgba(255,255,255,0.1); color: #cfe0ff; box-shadow: none; margin: 0;
+    border: 1px solid var(--panel-border); border-radius: 8px;
+  }
   .hidden { display: none !important; }
 
   #vignette {
     position: fixed; inset: 0; pointer-events: none; z-index: 9;
     background: radial-gradient(ellipse at center, transparent 58%, rgba(4, 8, 24, 0.32) 100%);
   }
+  #vignette.danger { animation: dangerPulse 1s ease-in-out infinite; }
+  @keyframes dangerPulse {
+    0%, 100% { background: radial-gradient(ellipse at center, transparent 58%, rgba(120, 8, 8, 0.3) 100%); }
+    50% { background: radial-gradient(ellipse at center, transparent 45%, rgba(190, 10, 10, 0.5) 100%); }
+  }
 
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px;
+  }
+
+  #crosshair {
+    position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
+    transform: translate(-50%, -50%);
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: rgba(255,255,255,0.9);
+    box-shadow: 0 0 4px rgba(0,0,0,0.6);
+  }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+  #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+
+  #health-wrap { position: absolute; left: 20px; bottom: 20px; width: 250px; padding: 10px 12px; }
+  #health-label { color: #cfe0ff; font-size: 12px; letter-spacing: 2px; margin-bottom: 5px; }
+  #health-bar-bg { width: 100%; height: 16px; background: #4a1010; border-radius: 6px; overflow: hidden; }
+  #health-bar { width: 100%; height: 100%; background: linear-gradient(#7CFC7C, #2faf2f); transition: width 0.15s; }
+
+  #ammo-wrap {
+    position: absolute; right: 20px; bottom: 20px; padding: 8px 14px;
+    color: var(--gold); font-size: 20px; text-align: right;
+    pointer-events: auto; cursor: pointer;
+  }
+  #ammo-wrap .small { font-size: 10px; color: #aab8d0; letter-spacing: 1px; }
+  .ammo-row { opacity: 0.45; padding: 1px 6px; border-radius: 6px; }
+  .ammo-row.active { opacity: 1; background: rgba(255,210,63,0.16); }
+
+  #mouseking-wrap { position: absolute; left: 20px; top: 16px; width: 185px; padding: 7px 10px; }
+  #mouseking-label { color: var(--blue); font-size: 11px; letter-spacing: 1px; margin-bottom: 4px; }
+  #mk-bg { width: 100%; height: 10px; background: #4a1010; border-radius: 5px; overflow: hidden; }
+  #mk-bar { width: 100%; height: 100%; background: linear-gradient(#9ecbff, #4a86d8); transition: width 0.15s; }
+
+  #score-wrap { position: absolute; left: 20px; top: 78px; padding: 6px 10px; color: var(--gold); font-size: 14px; letter-spacing: 1px; }
+
+  #objective {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    color: #fff; padding: 8px 18px; font-size: 14px; letter-spacing: 1px;
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px;
+    white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  #hud-btns { position: absolute; top: 60px; right: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .hud-btn {
+    width: 40px; height: 40px; font-size: 19px; display: flex; align-items: center; justify-content: center;
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px;
+    color: #fff; pointer-events: auto; cursor: pointer;
+  }
+
+  #king-hp-wrap {
+    position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+    width: 400px; max-width: 78vw; padding: 8px 10px;
+    background: var(--panel); border: 2px solid #806000; border-radius: 10px;
+  }
+  #king-hp-label { color: var(--gold); font-size: 12px; letter-spacing: 2px; margin-bottom: 4px; text-align: center; }
+  #king-hp-bg { width: 100%; height: 12px; background: #4a1010; border-radius: 6px; overflow: hidden; }
+  #king-hp { width: 100%; height: 100%; background: linear-gradient(#ffd23f, #cf8f00); transition: width 0.15s; }
+
+  #message {
+    position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%);
+    color: #fff; font-size: 19px; text-shadow: 2px 2px 3px #000;
+    opacity: 0; transition: opacity 0.3s; text-align: center; max-width: 92vw;
+  }
+
+  #level-banner {
+    position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%) scale(0.6);
+    font-size: 44px; letter-spacing: 6px; color: var(--gold);
+    text-shadow: 0 3px 0 #7a3b00, 0 0 30px rgba(255,180,60,0.6), 2px 2px 6px #000;
+    opacity: 0; pointer-events: none; white-space: nowrap;
+  }
+  #level-banner.show { animation: bannerIn 3s ease-out forwards; }
+  @keyframes bannerIn {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+    12% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+    18% { transform: translate(-50%, -50%) scale(1); }
+    80% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.02); }
+  }
+
+  .float-text {
+    position: absolute; font-size: 17px; font-weight: bold; color: #ffe27a;
+    text-shadow: 1px 1px 2px #000, 0 0 8px rgba(255,180,60,0.5);
+    pointer-events: none; white-space: nowrap; transform: translate(-50%, -50%);
+  }
+
+  #damage-flash {
+    position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(255,0,0,0.45) 100%);
+    opacity: 0; pointer-events: none; transition: opacity 0.1s;
+  }
+
+  .stats-box {
+    margin: 14px auto 4px; padding: 12px 26px; text-align: left;
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px;
+    font-size: 15px; line-height: 2;
+  }
+  .stats-box .stat-val { color: var(--gold); float: right; margin-left: 34px; }
+  #rank-letter {
+    font-size: 88px; line-height: 1; margin: 6px 0 2px;
+    background: linear-gradient(180deg, #fff2b0, #ff8f3f);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 24px rgba(255,190,60,0.55));
+  }
+  #rank-caption { font-size: 14px; color: #aab8d0; letter-spacing: 2px; margin-bottom: 6px; }
 
   /* --- touch controls --- */
   #touch-ui { position: fixed; inset: 0; z-index: 15; pointer-events: none; }
   #joystick {
     position: absolute; left: 26px; bottom: 96px; width: 130px; height: 130px;
     border-radius: 50%; border: 2px solid rgba(255,255,255,0.35);
-    background: rgba(0,0,0,0.25); pointer-events: auto; touch-action: none;
+    background: rgba(10,16,32,0.3); pointer-events: auto; touch-action: none;
   }
   #joystick-knob {
     position: absolute; left: 50%; top: 50%; width: 56px; height: 56px;
@@ -64,77 +214,24 @@
   }
   #jump-btn:active { background: rgba(90,140,220,0.8); }
 
-  #crosshair {
-    position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
-    transform: translate(-50%, -50%);
-  }
-  #crosshair::before, #crosshair::after {
-    content: ''; position: absolute; background: rgba(255,255,255,0.9);
-  }
-  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
-  #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
-
-  #health-wrap {
-    position: absolute; left: 24px; bottom: 24px; width: 260px;
-    background: rgba(0,0,0,0.55); padding: 10px 12px; border: 2px solid #444;
-  }
-  #health-label { color: #fff; font-size: 13px; letter-spacing: 1px; margin-bottom: 5px; }
-  #health-bar-bg { width: 100%; height: 18px; background: #4a1010; }
-  #health-bar { width: 100%; height: 100%; background: linear-gradient(#7CFC7C, #2faf2f); transition: width 0.15s; }
-
-  #ammo-wrap {
-    position: absolute; right: 24px; bottom: 24px;
-    background: rgba(0,0,0,0.55); padding: 8px 14px; border: 2px solid #444;
-    color: #ffd23f; font-size: 20px; text-align: right;
-    pointer-events: auto; cursor: pointer;
-  }
-  #ammo-wrap .small { font-size: 11px; color: #ccc; letter-spacing: 1px; }
-  .ammo-row { opacity: 0.45; padding: 1px 4px; }
-  .ammo-row.active { opacity: 1; background: rgba(255,210,63,0.15); }
-
-  #mouseking-wrap {
-    position: absolute; left: 24px; top: 18px; width: 190px;
-    background: rgba(0,0,0,0.5); padding: 7px 10px; border: 2px solid #445;
-  }
-  #mouseking-label { color: #cfe3ff; font-size: 12px; letter-spacing: 1px; margin-bottom: 4px; }
-  #mk-bg { width: 100%; height: 12px; background: #4a1010; }
-  #mk-bar { width: 100%; height: 100%; background: linear-gradient(#9ecbff, #4a86d8); transition: width 0.15s; }
-
-  #objective {
-    position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
-    background: rgba(0,0,0,0.5); color: #fff; padding: 8px 18px;
-    font-size: 15px; letter-spacing: 1px; border: 1px solid #555;
-  }
-
-  #king-hp-wrap {
-    position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
-    width: 420px; background: rgba(0,0,0,0.55); padding: 8px 10px; border: 2px solid #806000;
-  }
-  #king-hp-label { color: #ffd23f; font-size: 13px; letter-spacing: 2px; margin-bottom: 4px; text-align: center; }
-  #king-hp-bg { width: 100%; height: 14px; background: #4a1010; }
-  #king-hp { width: 100%; height: 100%; background: linear-gradient(#ffd23f, #cf8f00); transition: width 0.15s; }
-
-  #message {
-    position: absolute; left: 50%; bottom: 130px; transform: translateX(-50%);
-    color: #fff; font-size: 20px; text-shadow: 2px 2px 2px #000;
-    opacity: 0; transition: opacity 0.3s; text-align: center; white-space: nowrap;
-  }
-
-  #damage-flash {
-    position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(255,0,0,0.45) 100%);
-    opacity: 0; pointer-events: none; transition: opacity 0.1s;
-  }
-
   /* small screens (phones) */
   @media (max-width: 700px) {
-    .overlay h1 { font-size: 32px; }
+    .overlay h1 { font-size: 33px; letter-spacing: 3px; }
+    .overlay .subtitle { font-size: 15px; letter-spacing: 6px; }
     .overlay h2 { font-size: 24px; }
-    .overlay p { font-size: 14px; max-width: 92vw; }
-    #health-wrap { width: 160px; padding: 6px 8px; left: 12px; bottom: 12px; }
-    #ammo-wrap { right: 12px; bottom: 12px; padding: 6px 10px; font-size: 17px; }
-    #objective { font-size: 11px; top: 8px; white-space: nowrap; }
-    #king-hp-wrap { width: 80vw; top: 40px; }
-    #message { font-size: 14px; bottom: 220px; }
+    .overlay p { font-size: 13px; max-width: 92vw; }
+    .overlay .keys { font-size: 12px; }
+    #health-wrap { width: 150px; padding: 6px 8px; left: 12px; bottom: 12px; }
+    #ammo-wrap { right: 12px; bottom: 12px; padding: 6px 10px; font-size: 16px; }
+    #objective { font-size: 10px; top: 8px; }
+    #mouseking-wrap { width: 140px; top: 44px; left: 12px; }
+    #score-wrap { top: 100px; left: 12px; font-size: 12px; }
+    #king-hp-wrap { top: 44px; width: 60vw; left: auto; right: 12px; transform: none; }
+    #hud-btns { top: 104px; }
+    #message { font-size: 13px; bottom: 220px; }
+    #level-banner { font-size: 26px; letter-spacing: 3px; }
+    #rank-letter { font-size: 64px; }
+    .stats-box { font-size: 13px; padding: 10px 16px; }
   }
 </style>
 </head>
@@ -146,23 +243,29 @@
 <div id="hud">
   <div id="crosshair"></div>
   <div id="damage-flash"></div>
-  <div id="objective">Fight to the castle — defeat the CAT KING!</div>
+  <div id="objective">…</div>
+  <div id="level-banner"></div>
   <div id="king-hp-wrap" class="hidden">
-    <div id="king-hp-label">&#9813; CAT KING &#9813;</div>
+    <div id="king-hp-label" data-i18n="catKingBar">&#9813; CAT KING &#9813;</div>
     <div id="king-hp-bg"><div id="king-hp"></div></div>
   </div>
-  <div id="mouseking-wrap">
-    <div id="mouseking-label">&#128045; MOUSE KING</div>
+  <div id="mouseking-wrap" class="panel">
+    <div id="mouseking-label" data-i18n="mouseKingBar">&#128045; MOUSE KING</div>
     <div id="mk-bg"><div id="mk-bar"></div></div>
   </div>
-  <div id="health-wrap">
-    <div id="health-label">MOUSE HP</div>
+  <div id="score-wrap" class="panel"><span data-i18n="scoreLabel">SCORE</span> <span id="score-val">0</span></div>
+  <div id="hud-btns">
+    <div class="hud-btn" id="mute-btn">&#128266;</div>
+    <div class="hud-btn hidden" id="pause-btn">&#9208;</div>
+  </div>
+  <div id="health-wrap" class="panel">
+    <div id="health-label" data-i18n="hpLabel">MOUSE HP</div>
     <div id="health-bar-bg"><div id="health-bar"></div></div>
   </div>
-  <div id="ammo-wrap">
+  <div id="ammo-wrap" class="panel">
     <div class="ammo-row active" id="ammo-normal">&#128640; <span>0</span></div>
     <div class="ammo-row" id="ammo-seeker">&#127919; <span>0</span></div>
-    <div class="small">FIREWORKS &middot; TAP / [1][2] SWITCH</div>
+    <div class="small" data-i18n="ammoHint">FIREWORKS &middot; TAP / [1][2] SWITCH</div>
   </div>
   <div id="message"></div>
 </div>
@@ -174,31 +277,37 @@
 </div>
 
 <div id="start-screen" class="overlay">
+  <button id="lang-btn">中 / EN</button>
   <h1>WORLD WAR MOUSE</h1>
-  <p>You are a mouse soldier. The cat army has invaded — tanks shaped like cats
-  with firework cannons in their mouths, deploying cat troopers across the field.</p>
-  <p>Scavenge <b style="color:#ff9d5c">fireworks</b> and fire them at the cats. Defend the
-  <b style="color:#9ecbff">MOUSE KING</b> in your house — if he falls, all is lost. Then fight
-  across the field and defeat the <b style="color:#ffd23f">CAT KING</b> in his castle.</p>
-  <p class="keys" id="controls-line">WASD — move &nbsp;|&nbsp; SPACE — jump &nbsp;|&nbsp; CLICK / F — fire &nbsp;|&nbsp; 1 / 2 — switch firework &nbsp;|&nbsp; SHIFT — sprint</p>
-  <button id="start-btn">CLICK TO ENLIST</button>
+  <div class="subtitle" data-i18n="subtitle">世界大战鼠</div>
+  <div class="vs-line">&#128045;&#127878; &nbsp;VS&nbsp; &#128049;&#128664;</div>
+  <p data-i18n="intro1">You are a mouse soldier. The cat army has invaded — cat-shaped tanks with firework cannons in their mouths, deploying cat troopers across the field.</p>
+  <p data-i18n="intro2">Scavenge fireworks, defend the MOUSE KING, and fight through three battles to defeat the CAT KING in his castle.</p>
+  <p class="keys" id="controls-line" data-i18n="controlsDesktop">WASD — move | SPACE — jump | CLICK / F — fire | 1/2 — switch firework | SHIFT — sprint</p>
+  <button id="start-btn" data-i18n="startBtn">CLICK TO ENLIST</button>
+  <div id="best-line" class="hidden"></div>
 </div>
 
 <div id="pause-screen" class="overlay hidden">
-  <h2>PAUSED</h2>
-  <button id="resume-btn">RESUME</button>
+  <h2 data-i18n="paused">PAUSED</h2>
+  <button id="resume-btn" data-i18n="resumeBtn">RESUME</button>
+  <button id="pause-restart-btn" class="minor-btn" data-i18n="restartBtn">RESTART</button>
 </div>
 
 <div id="gameover-screen" class="overlay hidden">
-  <h2 style="color:#ff6b6b">YOU WERE CAPTURED BY THE CATS</h2>
-  <p>The mouse resistance needs you. Try again!</p>
-  <button id="retry-btn">RETRY</button>
+  <h2 style="color:#ff6b6b" data-i18n="defeatTitle">DEFEAT</h2>
+  <p id="defeat-reason"></p>
+  <div class="stats-box" id="defeat-stats"></div>
+  <button id="retry-btn" data-i18n="retryBtn">RETRY</button>
 </div>
 
 <div id="victory-screen" class="overlay hidden">
-  <h1 style="font-size:42px">VICTORY!</h1>
-  <p>The Cat King has fallen. The fields are safe for mousekind!</p>
-  <button id="again-btn">PLAY AGAIN</button>
+  <h1 style="font-size:42px" data-i18n="victoryTitle">VICTORY!</h1>
+  <p data-i18n="victoryText">The Cat King has fallen. The fields are safe for mousekind!</p>
+  <div id="rank-letter">S</div>
+  <div id="rank-caption" data-i18n="rankCaption">BATTLE RANK</div>
+  <div class="stats-box" id="victory-stats"></div>
+  <button id="again-btn" data-i18n="againBtn">PLAY AGAIN</button>
 </div>
 
 <script src="lib/three.min.js"></script>
