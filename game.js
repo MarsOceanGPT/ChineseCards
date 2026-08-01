@@ -485,41 +485,69 @@
     bar.userData.fg.position.x = -bar.userData.width * (1 - frac) / 2;
   }
 
-  // ---------- particles ----------
-  var MAX_PARTICLES = 3000;
+  // ---------- particle system (soft round glow sprites, per-particle size/alpha) ----------
+  var PFX = IS_TOUCH ? 0.65 : 1;   // particle density scale on phones
+  var MAX_PARTICLES = 4500;
   var pPos = new Float32Array(MAX_PARTICLES * 3);
   var pCol = new Float32Array(MAX_PARTICLES * 3);
+  var pSiz = new Float32Array(MAX_PARTICLES);
+  var pAlp = new Float32Array(MAX_PARTICLES);
   var particles = [];
   var pFree = [];
-  for (var i = MAX_PARTICLES - 1; i >= 0; i--) { pFree.push(i); pPos[i * 3 + 1] = -1000; }
+  for (var i = MAX_PARTICLES - 1; i >= 0; i--) { pFree.push(i); pPos[i * 3 + 1] = -1000; pAlp[i] = 0; }
   var pGeom = new THREE.BufferGeometry();
   pGeom.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-  pGeom.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
-  var pPoints = new THREE.Points(pGeom, new THREE.PointsMaterial({
-    size: 0.45, vertexColors: true, transparent: true, opacity: 0.95,
-    depthWrite: false, blending: THREE.AdditiveBlending
-  }));
+  pGeom.setAttribute('aColor', new THREE.BufferAttribute(pCol, 3));
+  pGeom.setAttribute('aSize', new THREE.BufferAttribute(pSiz, 1));
+  pGeom.setAttribute('aAlpha', new THREE.BufferAttribute(pAlp, 1));
+  var pMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: [
+      'attribute vec3 aColor;',
+      'attribute float aSize;',
+      'attribute float aAlpha;',
+      'varying vec3 vColor;',
+      'varying float vAlpha;',
+      'void main() {',
+      '  vColor = aColor; vAlpha = aAlpha;',
+      '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+      '  gl_PointSize = aSize * (270.0 / -mv.z);',
+      '  gl_Position = projectionMatrix * mv;',
+      '}'
+    ].join('\n'),
+    fragmentShader: [
+      'varying vec3 vColor;',
+      'varying float vAlpha;',
+      'void main() {',
+      '  float d = length(gl_PointCoord - vec2(0.5)) * 2.0;',
+      '  float a = smoothstep(1.0, 0.12, d) * vAlpha;',
+      '  if (a < 0.004) discard;',
+      '  gl_FragColor = vec4(vColor * a, a);',
+      '}'
+    ].join('\n')
+  });
+  var pPoints = new THREE.Points(pGeom, pMat);
   pPoints.frustumCulled = false;
   scene.add(pPoints);
 
-  function spawnParticle(pos, vel, color, life, gravity) {
+  // opts: {gravity, size, endSize, drag, fade} — or a number for gravity (legacy)
+  function spawnParticle(pos, vel, color, life, opts) {
     if (!pFree.length) return;
+    if (typeof opts === 'number') opts = { gravity: opts };
+    opts = opts || {};
     var idx = pFree.pop();
     pPos[idx * 3] = pos.x; pPos[idx * 3 + 1] = pos.y; pPos[idx * 3 + 2] = pos.z;
     pCol[idx * 3] = color.r; pCol[idx * 3 + 1] = color.g; pCol[idx * 3 + 2] = color.b;
-    particles.push({ i: idx, vel: vel, life: life, maxLife: life, gravity: gravity });
-  }
-
-  var tmpColor = new THREE.Color();
-  function fireworkExplosion(pos, big) {
-    var count = big ? 90 : 55;
-    var hue = Math.random();
-    for (var k = 0; k < count; k++) {
-      var dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
-      var speed = (big ? 14 : 10) * (0.4 + Math.random() * 0.6);
-      tmpColor.setHSL((hue + Math.random() * 0.15) % 1, 1, 0.55 + Math.random() * 0.25);
-      spawnParticle(pos.clone(), dir.multiplyScalar(speed), tmpColor.clone(), 0.6 + Math.random() * 0.5, 9);
-    }
+    var size = opts.size !== undefined ? opts.size : 0.5;
+    pSiz[idx] = size; pAlp[idx] = 1;
+    particles.push({
+      i: idx, vel: vel, life: life, maxLife: life,
+      gravity: opts.gravity !== undefined ? opts.gravity : 9,
+      drag: opts.drag || 0,
+      size: size,
+      endSize: opts.endSize !== undefined ? opts.endSize : size,
+      fade: opts.fade || 1
+    });
   }
 
   function updateParticles(dt) {
@@ -529,17 +557,185 @@
       var idx = p.i;
       if (p.life <= 0) {
         pPos[idx * 3 + 1] = -1000;
+        pAlp[idx] = 0;
         pFree.push(idx);
         particles.splice(k, 1);
         continue;
+      }
+      if (p.drag) {
+        var dr = Math.max(0, 1 - p.drag * dt);
+        p.vel.multiplyScalar(dr);
       }
       p.vel.y -= p.gravity * dt;
       pPos[idx * 3] += p.vel.x * dt;
       pPos[idx * 3 + 1] += p.vel.y * dt;
       pPos[idx * 3 + 2] += p.vel.z * dt;
+      var t = 1 - p.life / p.maxLife;
+      pSiz[idx] = p.size + (p.endSize - p.size) * t;
+      pAlp[idx] = Math.pow(Math.max(p.life / p.maxLife, 0), p.fade);
     }
     pGeom.attributes.position.needsUpdate = true;
-    pGeom.attributes.color.needsUpdate = true;
+    pGeom.attributes.aColor.needsUpdate = true;
+    pGeom.attributes.aSize.needsUpdate = true;
+    pGeom.attributes.aAlpha.needsUpdate = true;
+  }
+
+  // ---------- shockwave rings ----------
+  var rings = [];
+  function spawnRing(pos, color, maxScale, life, horizontal) {
+    var mesh = new THREE.Mesh(
+      new THREE.RingGeometry(0.55, 0.72, 28),
+      new THREE.MeshBasicMaterial({
+        color: color, transparent: true, opacity: 0.85,
+        depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+      })
+    );
+    mesh.position.copy(pos);
+    if (horizontal) { mesh.rotation.x = -Math.PI / 2; mesh.position.y = Math.max(0.12, pos.y); }
+    scene.add(mesh);
+    rings.push({ mesh: mesh, life: life, maxLife: life, maxScale: maxScale, bb: !horizontal });
+  }
+  function updateRings(dt) {
+    for (var k = rings.length - 1; k >= 0; k--) {
+      var r = rings[k];
+      r.life -= dt;
+      if (r.life <= 0) {
+        scene.remove(r.mesh);
+        r.mesh.geometry.dispose();
+        r.mesh.material.dispose();
+        rings.splice(k, 1);
+        continue;
+      }
+      var t = 1 - r.life / r.maxLife;
+      var e = 1 - (1 - t) * (1 - t); // ease-out
+      r.mesh.scale.setScalar(0.4 + r.maxScale * e);
+      r.mesh.material.opacity = 0.85 * (r.life / r.maxLife);
+      if (r.bb) r.mesh.quaternion.copy(camera.quaternion);
+    }
+  }
+
+  // ---------- flying debris ----------
+  var debris = [];
+  var debrisMats = [furMat, furDarkMat, trackMat, metalMat];
+  function spawnDebris(pos, count) {
+    for (var k = 0; k < count; k++) {
+      var s = 0.18 + Math.random() * 0.35;
+      var m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), debrisMats[(Math.random() * debrisMats.length) | 0]);
+      m.position.copy(pos);
+      m.castShadow = true;
+      scene.add(m);
+      debris.push({
+        mesh: m,
+        vel: new THREE.Vector3((Math.random() - 0.5) * 10, 5 + Math.random() * 8, (Math.random() - 0.5) * 10),
+        ang: new THREE.Vector3(Math.random() * 8, Math.random() * 8, Math.random() * 8),
+        life: 1.3 + Math.random() * 0.5
+      });
+    }
+  }
+  function updateDebris(dt) {
+    for (var k = debris.length - 1; k >= 0; k--) {
+      var d = debris[k];
+      d.life -= dt;
+      if (d.life <= 0) {
+        scene.remove(d.mesh);
+        d.mesh.geometry.dispose();
+        debris.splice(k, 1);
+        continue;
+      }
+      d.vel.y -= 22 * dt;
+      d.mesh.position.addScaledVector(d.vel, dt);
+      if (d.mesh.position.y < 0.1) { d.mesh.position.y = 0.1; d.vel.y = Math.abs(d.vel.y) * 0.35; d.vel.x *= 0.7; d.vel.z *= 0.7; }
+      d.mesh.rotation.x += d.ang.x * dt;
+      d.mesh.rotation.y += d.ang.y * dt;
+      d.mesh.rotation.z += d.ang.z * dt;
+      if (d.life < 0.3) d.mesh.scale.setScalar(d.life / 0.3);
+    }
+  }
+
+  // ---------- explosion light pool ----------
+  var boomLights = [];
+  for (var bl = 0; bl < 3; bl++) {
+    var L = new THREE.PointLight(0xffaa55, 0, 26);
+    scene.add(L);
+    boomLights.push(L);
+  }
+  var boomLightIdx = 0;
+  function flashLight(pos, color, intensity) {
+    var L = boomLights[boomLightIdx++ % boomLights.length];
+    L.position.copy(pos);
+    L.position.y = Math.max(L.position.y, 1.5);
+    L.color.set(color);
+    L.intensity = intensity;
+  }
+  function updateBoomLights(dt) {
+    boomLights.forEach(function (L) {
+      if (L.intensity > 0) L.intensity = Math.max(0, L.intensity - dt * 22);
+    });
+  }
+
+  // ---------- firework explosions with crackle bursts ----------
+  var tmpColor = new THREE.Color();
+  var crackles = []; // {pos, t, hue}
+
+  function sparkBurst(pos, count, hue, speed, life, size) {
+    count = Math.round(count * PFX);
+    for (var k = 0; k < count; k++) {
+      var dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      var sp = speed * (0.35 + Math.random() * 0.65);
+      tmpColor.setHSL((hue + Math.random() * 0.12) % 1, 1, 0.55 + Math.random() * 0.3);
+      spawnParticle(pos.clone(), dir.multiplyScalar(sp), tmpColor.clone(),
+        life * (0.7 + Math.random() * 0.6),
+        { gravity: 7, drag: 1.1, size: size, endSize: size * 0.25, fade: 0.7 });
+    }
+  }
+
+  function fireworkExplosion(pos, big) {
+    var hue = Math.random();
+    tmpColor.setHSL(hue, 1, 0.6);
+    // core flash + shockwave
+    spawnParticle(pos.clone(), new THREE.Vector3(0, 0, 0), new THREE.Color(1, 1, 1), 0.18,
+      { gravity: 0, size: big ? 7 : 4.5, endSize: big ? 11 : 7, fade: 0.8 });
+    spawnRing(pos.clone(), tmpColor.clone(), big ? 10 : 6.5, 0.5);
+    if (pos.y < 2.5) spawnRing(pos.clone(), tmpColor.clone(), big ? 8 : 5.5, 0.55, true);
+    flashLight(pos, tmpColor.clone(), big ? 8 : 5);
+    // main colored starburst
+    sparkBurst(pos, big ? 120 : 75, hue, big ? 15 : 11, 1.0, 0.55);
+    // white-hot inner sparks
+    for (var k = 0; k < 16 * PFX; k++) {
+      var dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      spawnParticle(pos.clone(), dir.multiplyScalar(4 + Math.random() * 5), new THREE.Color(1, 1, 0.9),
+        0.3 + Math.random() * 0.2, { gravity: 2, size: 0.8, endSize: 0.2 });
+    }
+    // glowing smoke haze
+    for (var s = 0; s < 10 * PFX; s++) {
+      var sd = new THREE.Vector3((Math.random() - 0.5) * 3, 1 + Math.random() * 2.5, (Math.random() - 0.5) * 3);
+      tmpColor.setHSL(hue, 0.5, 0.16);
+      spawnParticle(pos.clone(), sd, tmpColor.clone(), 1.4 + Math.random() * 0.6,
+        { gravity: -0.6, drag: 1.5, size: 1.2, endSize: 3.6, fade: 1.6 });
+    }
+    // delayed crackle pops around the blast
+    var pops = big ? 4 : 2;
+    for (var c = 0; c < pops; c++) {
+      crackles.push({
+        pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 4 + 1, (Math.random() - 0.5) * 6)),
+        t: 0.2 + Math.random() * 0.45,
+        hue: (hue + Math.random() * 0.3) % 1
+      });
+    }
+  }
+
+  function updateCrackles(dt) {
+    for (var k = crackles.length - 1; k >= 0; k--) {
+      var c = crackles[k];
+      c.t -= dt;
+      if (c.t <= 0) {
+        sparkBurst(c.pos, 26, c.hue, 6.5, 0.55, 0.42);
+        spawnParticle(c.pos.clone(), new THREE.Vector3(0, 0, 0), new THREE.Color(1, 1, 1), 0.12,
+          { gravity: 0, size: 2.6, endSize: 4, fade: 0.8 });
+        playNoise(0.1, 0.16, 2000);
+        crackles.splice(k, 1);
+      }
+    }
   }
 
   // ---------- audio ----------
@@ -977,6 +1173,10 @@
     var mesh = buildRocketMesh(friendly, seek);
     mesh.position.copy(origin);
     mesh.lookAt(origin.clone().add(dir));
+    if (friendly) {
+      var glow = new THREE.PointLight(seek ? 0x66ccff : 0xffa040, 1.2, 8);
+      mesh.add(glow);
+    }
     scene.add(mesh);
     projectiles.push({
       mesh: mesh,
@@ -1012,6 +1212,8 @@
       var p = new THREE.Vector3(t.x, 2.5 * t.scale, t.z);
       fireworkExplosion(p, true);
       fireworkExplosion(p.clone().add(new THREE.Vector3(1, 1, 0)), true);
+      spawnDebris(p, Math.round((t.isKing ? 16 : 10) * PFX));
+      shake = Math.min(shake + 0.4, 0.7);
       sfx.explode();
       scene.remove(t.mesh);
       var ci = obstacles.indexOf(t.collider);
@@ -1548,7 +1750,16 @@
       }
       p.t += dt;
       p.mesh.position.y = 0.15 + Math.sin(p.t * 2.5) * 0.12;
-      if (p.type !== 'popcorn') p.mesh.rotation.y += dt * 1.5;
+      if (p.type !== 'popcorn') {
+        p.mesh.rotation.y += dt * 1.5;
+        // idle sparkle fountain so pickups glitter from afar
+        if (Math.random() < dt * 5) {
+          tmpColor.setHSL(p.type === 'seeker' || p.type === 'seekerbox' ? 0.56 : 0.09, 1, 0.65);
+          spawnParticle(new THREE.Vector3(p.x + (Math.random() - 0.5) * 0.6, 1.2, p.z + (Math.random() - 0.5) * 0.6),
+            new THREE.Vector3(0, 1.5 + Math.random(), 0), tmpColor.clone(), 0.7,
+            { gravity: -0.5, size: 0.3, endSize: 0.06 });
+        }
+      }
       if (player.pos.y < 2.5 && Math.hypot(player.pos.x - p.x, player.pos.z - p.z) < 1.9) {
         if (p.type === 'popcorn') {
           if (player.hp >= PLAYER_MAX_HP - 1) continue;
@@ -1564,6 +1775,8 @@
           sfx.pickup();
           showMessage('Picked up fireworks! +' + p.amount + ' rockets', 2);
         }
+        sparkBurst(new THREE.Vector3(p.x, 1.2, p.z), 22,
+          p.type === 'popcorn' ? 0.13 : (p.type === 'seeker' || p.type === 'seekerbox' ? 0.56 : 0.09), 5, 0.5, 0.4);
         consumePickup(p);
         updateHud();
       }
@@ -1828,7 +2041,8 @@
       p.mesh.position.addScaledVector(p.vel, dt);
       var pos = p.mesh.position;
 
-      var sparkCount = p.friendly ? 4 : 2;
+      // ember spray + glowing trail behind every rocket
+      var sparkCount = Math.round((p.friendly ? 4 : 2) * PFX);
       for (var sp = 0; sp < sparkCount; sp++) {
         var along = pos.clone().addScaledVector(p.vel, -dt * Math.random());
         var backVel = p.vel.clone().multiplyScalar(-0.06).add(new THREE.Vector3(
@@ -1839,7 +2053,14 @@
         else if (roll < 0.55) tmpColor.setHSL(0.07 + Math.random() * 0.06, 1, 0.55 + Math.random() * 0.2);
         else if (roll < 0.85) tmpColor.setHSL(0.12, 0.9, 0.75);
         else tmpColor.setRGB(1, 1, 1);
-        spawnParticle(along, backVel, tmpColor.clone(), 0.35 + Math.random() * 0.35, 6);
+        spawnParticle(along, backVel, tmpColor.clone(), 0.35 + Math.random() * 0.35,
+          { gravity: 6, drag: 1.5, size: 0.4, endSize: 0.1, fade: 0.7 });
+      }
+      // soft glow puff that lingers along the flight path
+      if (Math.random() < 0.55) {
+        tmpColor.setHSL(p.seek ? 0.56 : 0.08, 0.9, 0.3);
+        spawnParticle(pos.clone(), new THREE.Vector3(0, 0.4, 0), tmpColor.clone(), 0.5,
+          { gravity: 0, size: 0.9, endSize: 1.8, fade: 1.4 });
       }
 
       var boom = false;
@@ -1932,6 +2153,10 @@
     }
     updateAmbient(dt);
     updateParticles(dt);
+    updateRings(dt);
+    updateDebris(dt);
+    updateBoomLights(dt);
+    updateCrackles(dt);
     updateBillboards();
     renderer.render(scene, camera);
   }
