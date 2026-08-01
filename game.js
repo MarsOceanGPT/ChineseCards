@@ -4,6 +4,104 @@
 
   var IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
+  // ---------- localization ----------
+  var I18N = {
+    en: {
+      subtitle: 'THE FIREWORK WAR',
+      intro1: 'You are a mouse soldier. The cat army has invaded — cat-shaped tanks with <b style="color:#ff9d5c">firework cannons</b> in their mouths, deploying cat troopers across the field.',
+      intro2: 'Scavenge fireworks, defend the <b style="color:#9ecbff">MOUSE KING</b>, and fight through three battles to defeat the <b style="color:#ffd23f">CAT KING</b> in his castle.',
+      controlsDesktop: 'WASD — move | SPACE — jump | CLICK / F — fire | 1/2 — switch firework | SHIFT — sprint',
+      controlsTouch: 'STICK — move | DRAG — aim | TAP A CAT — fire at it | 🎆 fire | ⬆ jump',
+      startBtn: 'START MISSION',
+      paused: 'PAUSED', resumeBtn: 'RESUME', restartBtn: 'RESTART',
+      defeatTitle: 'DEFEAT', retryBtn: 'RETRY',
+      victoryTitle: 'VICTORY!', victoryText: 'The Cat King has fallen. The fields are safe for mousekind!',
+      againBtn: 'PLAY AGAIN', rankCaption: 'BATTLE RANK',
+      hpLabel: 'MOUSE HP', mouseKingBar: '🐭 MOUSE KING', catKingBar: '♛ CAT KING ♛',
+      ammoHint: 'FIREWORKS · TAP / [1][2] SWITCH', scoreLabel: 'SCORE',
+      bestLine: '🏆 BEST: {0} · RANK {1}',
+      obj1: 'LEVEL 1 · SKIRMISH — wipe out the cat scout patrol!',
+      obj2: 'LEVEL 2 · INVASION — destroy the cat armor column!',
+      obj3: 'LEVEL 3 · THE CAT KING — storm the castle and end this war!',
+      banner1: 'LEVEL 1 · SKIRMISH', banner2: 'LEVEL 2 · INVASION', banner3: 'LEVEL 3 · THE CAT KING',
+      msgStart: 'Grab the firework ahead — and keep the Mouse King safe!',
+      msgLevel2: '⚠ LEVEL 2 — THE INVASION BEGINS! Cat armor is rolling in!',
+      msgLevel3: '👑 LEVEL 3 — THE CAT KING HAS ARRIVED AT HIS CASTLE!',
+      msgRockets: 'Picked up fireworks! +{0} rockets',
+      msgSeekers: 'Seeker fireworks! +{0} 🎯 (they chase cats!)',
+      msgPopcorn: 'Popcorn! +{0} HP 🍿',
+      msgNoAmmo: 'No fireworks! Find more on the battlefield.',
+      msgTankDown: 'Cat tank destroyed! {0} more to go.',
+      msgSkirmishWon: '☑ SKIRMISH WON! But scouts were only the beginning... brace for the INVASION!',
+      msgInvasionWon: '☑ INVASION REPELLED! A royal warhorn echoes... the CAT KING approaches!',
+      msgEscortDown: 'The escort is down! Storm the castle and destroy the CAT KING!',
+      msgRaid: '⚠ A cat raider is heading for the MOUSE KING!',
+      msgWrath: '😾 You dare approach the CAT KING?! Every cat on the field is coming for YOU!',
+      msgKingHurt: '⚠ The MOUSE KING is under attack! Defend him!',
+      msgAllyDown: 'A fellow mouse soldier has fallen!',
+      msgGuardDown: 'A royal mouse guard has fallen!',
+      msgAttic: '🐭🌍 You joined the Attic Conference of Mouse World Leaders! They gift you 3 seeker fireworks.',
+      loseCaught: 'You were captured by the cats. The mouse resistance needs you — try again!',
+      loseKing: 'The Mouse King has fallen! The cats have won the war.',
+      stTime: 'Battle time', stTanks: 'Tanks destroyed', stCats: 'Cats defeated',
+      stAccuracy: 'Accuracy', stScore: 'Final score', stBest: 'New best score!'
+    },
+    zh: {
+      subtitle: '世 界 大 战 鼠',
+      intro1: '你是一名小老鼠士兵。猫猫大军入侵了——猫形坦克的嘴里藏着<b style="color:#ff9d5c">烟花大炮</b>,还会不断放出行走的猫兵!',
+      intro2: '捡起战场上的烟花,保护好<b style="color:#9ecbff">鼠国王</b>,打赢三场战役,最后攻进城堡击败<b style="color:#ffd23f">猫国王</b>!',
+      controlsDesktop: 'WASD 移动 | 空格 跳跃 | 点击/F 开火 | 1/2 切换烟花 | Shift 冲刺',
+      controlsTouch: '摇杆移动 | 拖动瞄准 | 点猫开火 | 🎆 开火 | ⬆ 跳跃',
+      startBtn: '开始出击!',
+      paused: '暂停', resumeBtn: '继续战斗', restartBtn: '重新开始',
+      defeatTitle: '战败', retryBtn: '再来一次',
+      victoryTitle: '胜利!', victoryText: '猫国王被击败,鼠国的原野安全了!',
+      againBtn: '再玩一次', rankCaption: '战斗评级',
+      hpLabel: '小鼠生命值', mouseKingBar: '🐭 鼠国王', catKingBar: '♛ 猫国王 ♛',
+      ammoHint: '烟花弹药 · 点这里/[1][2]切换', scoreLabel: '得分',
+      bestLine: '🏆 最高纪录: {0} 分 · {1} 级',
+      obj1: '第一关 · 遭遇战 —— 消灭猫军侦察小队!',
+      obj2: '第二关 · 大入侵 —— 摧毁猫军装甲部队!',
+      obj3: '第三关 · 猫国王 —— 攻进城堡,终结战争!',
+      banner1: '第一关 · 遭遇战', banner2: '第二关 · 大入侵', banner3: '第三关 · 猫国王驾到',
+      msgStart: '捡起前面的烟花——保护好鼠国王!',
+      msgLevel2: '⚠ 第二关——猫军大入侵开始了!',
+      msgLevel3: '👑 第三关——猫国王驾临城堡!',
+      msgRockets: '捡到烟花!火箭 +{0}',
+      msgSeekers: '追踪烟花!+{0} 🎯 (会自动追着猫飞!)',
+      msgPopcorn: '爆米花!回血 +{0} 🍿',
+      msgNoAmmo: '没烟花了!快去战场上找!',
+      msgTankDown: '击毁猫坦克!还剩 {0} 辆。',
+      msgSkirmishWon: '☑ 遭遇战胜利!但侦察兵只是开始……准备迎接大入侵!',
+      msgInvasionWon: '☑ 击退入侵!远处响起王家战号……猫国王来了!',
+      msgEscortDown: '护卫全灭!冲进城堡,消灭猫国王!',
+      msgRaid: '⚠ 猫突袭兵正冲向鼠国王!',
+      msgWrath: '😾 你竟敢靠近猫国王?!全场的猫都朝你冲来了!',
+      msgKingHurt: '⚠ 鼠国王遇袭!快去保护他!',
+      msgAllyDown: '一位鼠战友倒下了!',
+      msgGuardDown: '一位王家鼠卫倒下了!',
+      msgAttic: '🐭🌍 你参加了阁楼上的世界鼠领袖会议!获赠 3 枚追踪烟花!',
+      loseCaught: '你被猫抓住了。鼠国需要你——再试一次!',
+      loseKing: '鼠国王倒下了……猫赢得了战争。',
+      stTime: '战斗用时', stTanks: '击毁坦克', stCats: '击败猫兵',
+      stAccuracy: '命中率', stScore: '最终得分', stBest: '新纪录!'
+    }
+  };
+  var LANG = (function () {
+    try {
+      var saved = localStorage.getItem('wwm-lang');
+      if (saved === 'zh' || saved === 'en') return saved;
+    } catch (e) { }
+    return (navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+  })();
+  function T(key) {
+    var s = I18N[LANG][key];
+    if (s === undefined) s = I18N.en[key];
+    if (s === undefined) s = key;
+    for (var i = 1; i < arguments.length; i++) s = s.replace('{' + (i - 1) + '}', arguments[i]);
+    return s;
+  }
+
   // ---------- constants ----------
   var MAP_X = 65;
   var MAP_Z_MIN = -115, MAP_Z_MAX = 118;
@@ -1022,6 +1120,7 @@
       playTone(up ? 170 : 230, up ? 240 : 160, 0.14, 0.09, 'triangle');
     },
     land: function (vol) { playNoise(0.12, 0.3 * vol, 500); playTone(130, 60, 0.12, 0.18 * vol, 'sine'); },
+    heart: function () { playTone(75, 55, 0.09, 0.28, 'sine'); playTone(72, 52, 0.09, 0.2, 'sine', 0.17); },
     horn: function () {
       playBend([[0, 190], [0.35, 250], [1, 110]], 0.9, 0.18, 'sawtooth');
       playBend([[0, 95], [0.35, 125], [1, 55]], 0.9, 0.14, 'square');
@@ -1033,6 +1132,83 @@
       });
     }
   };
+
+  // ---------- background music (procedural chiptune march) ----------
+  var musicMuted = false;
+  try { musicMuted = localStorage.getItem('wwm-muted') === '1'; } catch (e) { }
+  var musicGain = null, musicTimer = null, musicStep = 0, nextNoteT = 0;
+  var MELODY = [
+    440, 0, 523, 659, 880, 0, 784, 659, 523, 587, 659, 0, 523, 0, 494, 0,
+    440, 0, 523, 659, 880, 0, 1047, 880, 784, 659, 698, 659, 587, 0, 659, 0
+  ];
+  var BASSLINE = [220, 174.6, 196, 164.8]; // A F G E, one root per bar
+  function ensureMusicBus() {
+    if (!audio()) return false;
+    if (!musicGain) {
+      musicGain = audioCtx.createGain();
+      musicGain.gain.value = musicMuted ? 0 : 1;
+      musicGain.connect(masterBus);
+    }
+    return true;
+  }
+  function mBlip(freq, when, vol, type, dur) {
+    var osc = audioCtx.createOscillator();
+    osc.type = type;
+    osc.frequency.value = freq;
+    var g = audioCtx.createGain();
+    g.gain.setValueAtTime(vol, when);
+    g.gain.exponentialRampToValueAtTime(0.001, when + dur);
+    osc.connect(g); g.connect(musicGain);
+    osc.start(when); osc.stop(when + dur);
+  }
+  function mHat(when) {
+    var len = Math.floor(audioCtx.sampleRate * 0.03);
+    var buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var k = 0; k < len; k++) d[k] = (Math.random() * 2 - 1) * (1 - k / len);
+    var src = audioCtx.createBufferSource(); src.buffer = buf;
+    var g = audioCtx.createGain(); g.gain.value = 0.05;
+    src.connect(g); g.connect(musicGain);
+    src.start(when);
+  }
+  function scheduleMusicStep(step, when) {
+    var s32 = step % 32;
+    var m = MELODY[s32];
+    if (m) mBlip(m, when, 0.05, 'square', 0.2);
+    if (s32 % 4 === 0) {
+      var bar = Math.floor(s32 / 8);
+      mBlip(BASSLINE[bar] * (s32 % 8 === 0 ? 1 : 0.5) * (s32 % 8 === 0 ? 1 : 1), when, 0.07, 'triangle', 0.24);
+      mBlip(BASSLINE[bar] / 2, when, 0.05, 'square', 0.22);
+    }
+    if (s32 % 2 === 1) mHat(when);
+  }
+  function startMusic() {
+    if (musicTimer || !ensureMusicBus()) return;
+    musicStep = 0;
+    nextNoteT = audioCtx.currentTime + 0.1;
+    musicTimer = setInterval(function () {
+      if (!audioCtx) return;
+      while (nextNoteT < audioCtx.currentTime + 0.35) {
+        scheduleMusicStep(musicStep++, nextNoteT);
+        nextNoteT += 0.21;
+      }
+    }, 80);
+  }
+  function stopMusic() {
+    if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
+  }
+  var muteBtn = document.getElementById('mute-btn');
+  function refreshMuteBtn() { muteBtn.innerHTML = musicMuted ? '&#128263;' : '&#128266;'; }
+  refreshMuteBtn();
+  function toggleMute(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    musicMuted = !musicMuted;
+    try { localStorage.setItem('wwm-muted', musicMuted ? '1' : '0'); } catch (err) { }
+    if (musicGain) musicGain.gain.value = musicMuted ? 0 : 1;
+    refreshMuteBtn();
+  }
+  muteBtn.addEventListener('click', toggleMute);
+  muteBtn.addEventListener('touchend', toggleMute, { passive: false });
 
   // ---------- player ----------
   var player = {
@@ -1370,17 +1546,64 @@
   var levelTransition = 0;
   var ALL_TANK_SPOTS = [[-24, 44], [22, 8], [34, 26], [-38, 2], [-14, -34], [20, -62], [-10, -70], [14, -78]];
   var objectiveEl = document.getElementById('objective');
-  function setObjective(text) { objectiveEl.textContent = text; }
+  var currentObjectiveKey = null;
+  function setObjective(key) { currentObjectiveKey = key; objectiveEl.textContent = T(key); }
+
+  var bannerEl = document.getElementById('level-banner');
+  function showBanner(text) {
+    bannerEl.textContent = text;
+    bannerEl.classList.remove('show');
+    void bannerEl.offsetWidth;
+    bannerEl.classList.add('show');
+  }
+
+  // ---------- score & floating text ----------
+  var stats = { score: 0, tanks: 0, cats: 0, shots: 0, hits: 0 };
+  var scoreValEl = document.getElementById('score-val');
+  var floatTexts = [];
+  function spawnFloatText(text, worldPos, color) {
+    if (floatTexts.length > 10) return;
+    var el = document.createElement('div');
+    el.className = 'float-text';
+    el.textContent = text;
+    if (color) el.style.color = color;
+    document.getElementById('hud').appendChild(el);
+    floatTexts.push({ el: el, pos: worldPos.clone(), t: 1.2 });
+  }
+  function updateFloatTexts(dt) {
+    for (var k = floatTexts.length - 1; k >= 0; k--) {
+      var f = floatTexts[k];
+      f.t -= dt;
+      if (f.t <= 0) {
+        f.el.remove();
+        floatTexts.splice(k, 1);
+        continue;
+      }
+      f.pos.y += dt * 2.2;
+      var v = f.pos.clone().project(camera);
+      if (v.z > 1) { f.el.style.opacity = '0'; continue; }
+      f.el.style.left = ((v.x + 1) / 2 * window.innerWidth) + 'px';
+      f.el.style.top = ((-v.y + 1) / 2 * window.innerHeight) + 'px';
+      f.el.style.opacity = String(Math.min(1, f.t));
+    }
+  }
+  function addScore(pts, worldPos) {
+    stats.score += pts;
+    scoreValEl.textContent = stats.score;
+    if (worldPos) spawnFloatText('+' + pts, worldPos);
+  }
 
   function startLevel(n) {
     level = n;
+    if (state === 'playing') showBanner(T('banner' + n));
     if (n === 1) {
-      setObjective('LEVEL 1 · SKIRMISH — wipe out the cat scout patrol!');
+      setObjective('obj1');
       spawnTank(-24, 44, { reload: 2.8, deploy: 11, cap: 2 });
       spawnTank(22, 8, { reload: 2.8, deploy: 11, cap: 2 });
     } else if (n === 2) {
-      setObjective('LEVEL 2 · INVASION — destroy the cat armor column!');
-      showMessage('⚠ LEVEL 2 — THE INVASION BEGINS! Cat armor is rolling in!', 4.5);
+      setObjective('obj2');
+      showMessage(T('msgLevel2'), 4.5);
+      addScore(500);
       spawnTank(34, 26, { reload: 2.2, deploy: 8, cap: 3 });
       spawnTank(-38, 2, { reload: 2.2, deploy: 8, cap: 3 });
       spawnTank(-14, -34, { reload: 2.2, deploy: 8, cap: 3 });
@@ -1390,8 +1613,9 @@
       sfx.horn();
       sfx.meow();
     } else if (n === 3) {
-      setObjective('LEVEL 3 · THE CAT KING — storm the castle and end this war!');
-      showMessage('👑 LEVEL 3 — THE CAT KING HAS ARRIVED AT HIS CASTLE!', 5);
+      setObjective('obj3');
+      showMessage(T('msgLevel3'), 5);
+      addScore(500);
       king = spawnTank(0, CASTLE_Z - 8, { king: true });
       spawnSoldier(-5.5, CASTLE_Z - 2, null, { guard: true });
       spawnSoldier(5.5, CASTLE_Z - 2, null, { guard: true });
@@ -1502,19 +1726,21 @@
       scene.remove(t.mesh);
       var ci = obstacles.indexOf(t.collider);
       if (ci >= 0) obstacles.splice(ci, 1);
+      stats.tanks++;
+      addScore(t.isKing ? 2000 : 250, p);
       if (t.isKing) winGame();
       else {
         var left = tanks.filter(function (x) { return x.alive && !x.isKing; }).length;
         if (left > 0) {
-          showMessage('Cat tank destroyed! ' + left + ' more to go.', 3);
+          showMessage(T('msgTankDown', left), 3);
         } else if (level === 1) {
-          showMessage('☑ SKIRMISH WON! But scouts were only the beginning... brace for the INVASION!', 5);
+          showMessage(T('msgSkirmishWon'), 5);
           levelTransition = 6;
         } else if (level === 2) {
-          showMessage('☑ INVASION REPELLED! A royal warhorn echoes... the CAT KING approaches!', 5);
+          showMessage(T('msgInvasionWon'), 5);
           levelTransition = 6;
         } else if (king && king.alive) {
-          showMessage('The escort is down! Storm the castle and destroy the CAT KING!', 4);
+          showMessage(T('msgEscortDown'), 4);
         }
       }
     }
@@ -1527,6 +1753,8 @@
       var idx = soldiers.indexOf(s);
       if (idx >= 0) {
         fireworkExplosion(s.pos.clone().setY(1.2), false);
+        stats.cats++;
+        addScore(s.kind === 'catguard' ? 150 : 50, s.pos.clone().setY(1.6));
         if (s.fromTank) s.fromTank.mySoldiers--;
         scene.remove(s.mesh);
         soldiers.splice(idx, 1);
@@ -1543,7 +1771,7 @@
         fireworkExplosion(a.pos.clone().setY(1), false);
         scene.remove(a.mesh);
         allies.splice(idx, 1);
-        showMessage('A fellow mouse soldier has fallen!', 2.5);
+        showMessage(T('msgAllyDown'), 2.5);
         sfx.squeak();
       }
     }
@@ -1558,7 +1786,7 @@
         fireworkExplosion(g.pos.clone().setY(1), false);
         scene.remove(g.mesh);
         mouseGuards.splice(idx, 1);
-        showMessage('A royal mouse guard has fallen!', 2.5);
+        showMessage(T('msgGuardDown'), 2.5);
         sfx.squeak();
       }
     }
@@ -1569,12 +1797,12 @@
     mouseKing.hp -= dmg;
     setHpBar(mouseKing.bar, mouseKing.hp / mouseKing.maxHp);
     sfx.squeak();
-    if (mouseKing.hp <= 150 && mouseKing.hp + dmg > 150) showMessage('⚠ The MOUSE KING is under attack! Defend him!', 3);
+    if (mouseKing.hp <= 150 && mouseKing.hp + dmg > 150) showMessage(T('msgKingHurt'), 3);
     if (mouseKing.hp <= 0) {
       mouseKing.alive = false;
       fireworkExplosion(mouseKing.pos.clone().setY(1.5), true);
       scene.remove(mouseKing.mesh);
-      loseGame('The Mouse King has fallen! The cats have won the war.');
+      loseGame(T('loseKing'));
     }
   }
 
@@ -1585,15 +1813,17 @@
     shake = Math.min(shake + (friendly ? 0.15 : 0.3), 0.6);
     var k, d;
     if (friendly) {
+      var hitSomething = false;
       tanks.forEach(function (t) {
         if (!t.alive) return;
         var dd = Math.hypot(pos.x - t.x, pos.z - t.z);
-        if (dd < ROCKET_SPLASH + t.scale * 2) damageTank(t, ROCKET_DAMAGE);
+        if (dd < ROCKET_SPLASH + t.scale * 2) { damageTank(t, ROCKET_DAMAGE); hitSomething = true; }
       });
       for (k = soldiers.length - 1; k >= 0; k--) {
         var s = soldiers[k];
-        if (pos.distanceTo(s.pos.clone().setY(pos.y)) < ROCKET_SPLASH + 1) damageSoldierObj(s, ROCKET_DAMAGE);
+        if (pos.distanceTo(s.pos.clone().setY(pos.y)) < ROCKET_SPLASH + 1) { damageSoldierObj(s, ROCKET_DAMAGE); hitSomething = true; }
       }
+      if (hitSomething) stats.hits++;
     } else {
       var r = ROCKET_SPLASH + 1.5;
       d = Math.hypot(pos.x - player.pos.x, pos.z - player.pos.z);
@@ -1700,7 +1930,8 @@
 
   if (IS_TOUCH) {
     var controlsLine = document.getElementById('controls-line');
-    if (controlsLine) controlsLine.textContent = 'STICK — move  |  DRAG — aim  |  TAP A CAT — fire at it  |  🎆 fire  |  ⬆ jump';
+    if (controlsLine) controlsLine.setAttribute('data-i18n', 'controlsTouch');
+    document.getElementById('pause-btn').classList.remove('hidden');
 
     joystickEl.addEventListener('touchstart', function (e) {
       e.preventDefault();
@@ -1730,6 +1961,7 @@
         if (t.identifier === joy.id) continue;
         if (t.target === fireBtn || t.target === jumpBtn || t.target === joystickEl || t.target === knobEl) continue;
         if (t.target === ammoWrap || ammoWrap.contains(t.target)) continue;
+        if (t.target.classList && t.target.classList.contains('hud-btn')) continue;
         if (aimTouch.id === null) {
           aimTouch.id = t.identifier;
           aimTouch.lastX = t.clientX; aimTouch.lastY = t.clientY;
@@ -1809,13 +2041,14 @@
     var isSeeker = player.weapon === 'seeker';
     if (isSeeker && player.seekers <= 0) {
       if (player.ammo > 0) { setWeapon('normal'); isSeeker = false; }
-      else { showMessage('No fireworks! Find more on the battlefield.', 1.6); return; }
+      else { showMessage(T('msgNoAmmo'), 1.6); return; }
     }
     if (!isSeeker && player.ammo <= 0) {
       if (player.seekers > 0) { setWeapon('seeker'); isSeeker = true; }
-      else { showMessage('No fireworks! Find more on the battlefield.', 1.6); return; }
+      else { showMessage(T('msgNoAmmo'), 1.6); return; }
     }
     if (isSeeker) player.seekers--; else player.ammo--;
+    stats.shots++;
     player.fireCooldown = 0.45;
     var muzzle = player.pos.clone().add(new THREE.Vector3(0, 1.5, 0));
     var shootDir;
@@ -1882,7 +2115,7 @@
     setTimeout(function () { damageFlash.style.opacity = '0'; }, 130);
     shake = Math.min(shake + 0.25, 0.6);
     updateHud();
-    if (player.hp <= 0) loseGame('You were captured by the cats. The mouse resistance needs you — try again!');
+    if (player.hp <= 0) loseGame(T('loseCaught'));
   }
 
   // ---------- screens / state ----------
@@ -1900,8 +2133,10 @@
     requestLock();
     audio();
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    startMusic();
     if (IS_TOUCH) touchUi.classList.remove('hidden');
-    showMessage('Grab the firework ahead — and keep the Mouse King safe!', 4);
+    showBanner(T('banner1'));
+    showMessage(T('msgStart'), 4);
   });
   document.getElementById('resume-btn').addEventListener('click', function () {
     state = 'playing';
@@ -1910,25 +2145,67 @@
   });
   document.getElementById('retry-btn').addEventListener('click', function () { location.reload(); });
   document.getElementById('again-btn').addEventListener('click', function () { location.reload(); });
+  document.getElementById('pause-restart-btn').addEventListener('click', function () { location.reload(); });
+  var pauseBtn = document.getElementById('pause-btn');
+  pauseBtn.addEventListener('touchend', function (e) {
+    e.preventDefault(); e.stopPropagation();
+    if (state === 'playing') { state = 'paused'; show('pause-screen'); }
+  }, { passive: false });
+
+  // ---------- end-screen stats ----------
+  function fmtTime(secs) {
+    var m = Math.floor(secs / 60), s = Math.floor(secs % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function statsRows(total) {
+    var acc = stats.shots > 0 ? Math.round(stats.hits / stats.shots * 100) : 0;
+    function row(label, val) {
+      return '<div>' + label + '<span class="stat-val">' + val + '</span></div>';
+    }
+    return row(T('stScore'), total) +
+      row(T('stTanks'), stats.tanks) +
+      row(T('stCats'), stats.cats) +
+      row(T('stAccuracy'), acc + '%') +
+      row(T('stTime'), fmtTime(elapsed));
+  }
+  function saveBest(total, rank) {
+    try {
+      var prev = JSON.parse(localStorage.getItem('wwm-best') || 'null');
+      if (!prev || total > prev.score) {
+        localStorage.setItem('wwm-best', JSON.stringify({ score: total, rank: rank }));
+        return true;
+      }
+    } catch (e) { }
+    return false;
+  }
 
   var victoryTimer = 0;
   function winGame() {
     state = 'won';
     victoryTimer = 0;
     fireHeld = false;
+    stopMusic();
     sfx.fanfare();
     if (document.exitPointerLock) document.exitPointerLock();
     touchUi.classList.add('hidden');
+    var total = stats.score + Math.round(Math.max(0, player.hp)) + Math.round(Math.max(0, mouseKing.hp)) * 2;
+    var rank = total >= 6000 ? 'S' : total >= 5000 ? 'A' : total >= 4000 ? 'B' : 'C';
+    document.getElementById('rank-letter').textContent = rank;
+    var html = statsRows(total);
+    if (saveBest(total, rank)) html += '<div style="color:#ffd23f">🏆 ' + T('stBest') + '</div>';
+    document.getElementById('victory-stats').innerHTML = html;
     show('victory-screen');
   }
   function loseGame(reason) {
     state = 'lost';
     fireHeld = false;
+    stopMusic();
     sfx.meow();
     if (document.exitPointerLock) document.exitPointerLock();
     touchUi.classList.add('hidden');
-    var p = document.querySelector('#gameover-screen p');
+    var p = document.getElementById('defeat-reason');
     if (p && reason) p.textContent = reason;
+    document.getElementById('defeat-stats').innerHTML = statsRows(stats.score);
     show('gameover-screen');
   }
 
@@ -1938,6 +2215,8 @@
   var raidTimer = 40;
   var atticDone = false;
   var stepSoundT = 0, climbSoundT = 0;
+  var heartT = 0, orbitT = 0;
+  var vignetteEl = document.getElementById('vignette');
 
   function updatePlayer(dt) {
     var speed = (keys.ShiftLeft || keys.ShiftRight) ? SPRINT_SPEED : PLAYER_SPEED;
@@ -2042,8 +2321,9 @@
         Math.abs(player.pos.x - HOUSE_X) < 5 && Math.abs(player.pos.z - HOUSE_Z) < 4) {
       atticDone = true;
       player.seekers += 3;
+      addScore(200);
       sfx.fanfare();
-      showMessage('🐭🌍 You joined the Attic Conference of Mouse World Leaders! They gift you 3 seeker fireworks.', 5);
+      showMessage(T('msgAttic'), 5);
     }
 
     // camera — with wall collision so the view never phases through geometry
@@ -2105,15 +2385,15 @@
           if (player.hp >= PLAYER_MAX_HP - 1) continue;
           player.hp = Math.min(PLAYER_MAX_HP, player.hp + p.amount);
           sfx.munch();
-          showMessage('Popcorn! +' + p.amount + ' HP 🍿', 2);
+          showMessage(T('msgPopcorn', p.amount), 2);
         } else if (p.type === 'seeker' || p.type === 'seekerbox') {
           player.seekers += p.amount;
           sfx.pickup();
-          showMessage('Seeker fireworks! +' + p.amount + ' 🎯 (they chase cats!)', 2.5);
+          showMessage(T('msgSeekers', p.amount), 2.5);
         } else {
           player.ammo += p.amount;
           sfx.pickup();
-          showMessage('Picked up fireworks! +' + p.amount + ' rockets', 2);
+          showMessage(T('msgRockets', p.amount), 2);
         }
         sparkBurst(new THREE.Vector3(p.x, 1.2, p.z), 22,
           p.type === 'popcorn' ? 0.13 : (p.type === 'seeker' || p.type === 'seekerbox' ? 0.56 : 0.09), 5, 0.5, 0.4);
@@ -2187,7 +2467,7 @@
       if (aliveTanks.length && mouseKing.alive) {
         var t = aliveTanks[(Math.random() * aliveTanks.length) | 0];
         spawnSoldier(t.x, t.z + 4, t, { mission: 'raid' });
-        showMessage('⚠ A cat raider is heading for the MOUSE KING!', 3.5);
+        showMessage(T('msgRaid'), 3.5);
         sfx.meow();
       }
     }
@@ -2204,7 +2484,7 @@
       wrath = false;
     }
     if (wrath && !wasWrath) {
-      showMessage('😾 You dare approach the CAT KING?! Every cat on the field is coming for YOU!', 4);
+      showMessage(T('msgWrath'), 4);
       sfx.horn();
       sfx.meow();
       setTimeout(function () { sfx.meow(); }, 220);
@@ -2562,8 +2842,20 @@
         messageTimer -= dt;
         if (messageTimer <= 0) messageEl.style.opacity = '0';
       }
+      // low-health heartbeat + red pulse
+      var danger = player.hp < 30;
+      vignetteEl.classList.toggle('danger', danger);
+      if (danger) {
+        heartT -= dt;
+        if (heartT <= 0) { heartT = 1.0; sfx.heart(); }
+      }
     } else if (state === 'won') {
       updateVictory(dt);
+    } else if (state === 'start') {
+      // slow showcase orbit around the battlefield behind the title
+      orbitT += dt * 0.09;
+      camera.position.set(Math.sin(orbitT) * 48, 15 + Math.sin(orbitT * 0.7) * 4, 52 + Math.cos(orbitT) * 48);
+      camera.lookAt(0, 3, 55);
     }
     updateAmbient(dt);
     updateParticles(dt);
@@ -2571,13 +2863,39 @@
     updateDebris(dt);
     updateBoomLights(dt);
     updateCrackles(dt);
+    updateFloatTexts(dt);
     updateBillboards();
     renderer.render(scene, camera);
   }
 
-  camera.position.set(10, 7, 122);
-  camera.lookAt(0, 3, 90);
+  // ---------- language wiring ----------
+  function updateBestLine() {
+    var el = document.getElementById('best-line');
+    try {
+      var b = JSON.parse(localStorage.getItem('wwm-best') || 'null');
+      if (b) {
+        el.classList.remove('hidden');
+        el.textContent = T('bestLine', b.score, b.rank);
+      }
+    } catch (e) { }
+  }
+  function applyLang() {
+    var nodes = document.querySelectorAll('[data-i18n]');
+    for (var k = 0; k < nodes.length; k++) {
+      nodes[k].innerHTML = T(nodes[k].getAttribute('data-i18n'));
+    }
+    if (currentObjectiveKey) objectiveEl.textContent = T(currentObjectiveKey);
+    document.documentElement.lang = LANG;
+    updateBestLine();
+  }
+  document.getElementById('lang-btn').addEventListener('click', function () {
+    LANG = LANG === 'zh' ? 'en' : 'zh';
+    try { localStorage.setItem('wwm-lang', LANG); } catch (e) { }
+    applyLang();
+  });
+
   startLevel(1);
+  applyLang();
   updateHud();
   setWeapon('normal');
   requestAnimationFrame(loop);
