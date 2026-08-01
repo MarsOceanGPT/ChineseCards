@@ -50,6 +50,14 @@
     pointer-events: auto; touch-action: none;
   }
   #fire-btn:active { background: rgba(255,120,60,0.8); }
+  #jump-btn {
+    position: absolute; right: 42px; bottom: 214px; width: 68px; height: 68px;
+    border-radius: 50%; border: 3px solid rgba(158,203,255,0.8);
+    background: rgba(40,80,140,0.55); color: #fff; font-size: 30px;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: auto; touch-action: none;
+  }
+  #jump-btn:active { background: rgba(90,140,220,0.8); }
 
   #crosshair {
     position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
@@ -71,10 +79,21 @@
 
   #ammo-wrap {
     position: absolute; right: 24px; bottom: 24px;
-    background: rgba(0,0,0,0.55); padding: 10px 16px; border: 2px solid #444;
-    color: #ffd23f; font-size: 22px; text-align: right;
+    background: rgba(0,0,0,0.55); padding: 8px 14px; border: 2px solid #444;
+    color: #ffd23f; font-size: 20px; text-align: right;
+    pointer-events: auto; cursor: pointer;
   }
-  #ammo-wrap .small { font-size: 12px; color: #ccc; letter-spacing: 1px; }
+  #ammo-wrap .small { font-size: 11px; color: #ccc; letter-spacing: 1px; }
+  .ammo-row { opacity: 0.45; padding: 1px 4px; }
+  .ammo-row.active { opacity: 1; background: rgba(255,210,63,0.15); }
+
+  #mouseking-wrap {
+    position: absolute; left: 24px; top: 18px; width: 190px;
+    background: rgba(0,0,0,0.5); padding: 7px 10px; border: 2px solid #445;
+  }
+  #mouseking-label { color: #cfe3ff; font-size: 12px; letter-spacing: 1px; margin-bottom: 4px; }
+  #mk-bg { width: 100%; height: 12px; background: #4a1010; }
+  #mk-bar { width: 100%; height: 100%; background: linear-gradient(#9ecbff, #4a86d8); transition: width 0.15s; }
 
   #objective {
     position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
@@ -125,19 +144,25 @@
     <div id="king-hp-label">&#9813; CAT KING &#9813;</div>
     <div id="king-hp-bg"><div id="king-hp"></div></div>
   </div>
+  <div id="mouseking-wrap">
+    <div id="mouseking-label">&#128045; MOUSE KING</div>
+    <div id="mk-bg"><div id="mk-bar"></div></div>
+  </div>
   <div id="health-wrap">
     <div id="health-label">MOUSE HP</div>
     <div id="health-bar-bg"><div id="health-bar"></div></div>
   </div>
   <div id="ammo-wrap">
-    <div id="ammo-count">&#128640; 0</div>
-    <div class="small">FIREWORK ROCKETS</div>
+    <div class="ammo-row active" id="ammo-normal">&#128640; <span>0</span></div>
+    <div class="ammo-row" id="ammo-seeker">&#127919; <span>0</span></div>
+    <div class="small">FIREWORKS &middot; TAP / [1][2] SWITCH</div>
   </div>
   <div id="message"></div>
 </div>
 
 <div id="touch-ui" class="hidden">
   <div id="joystick"><div id="joystick-knob"></div></div>
+  <div id="jump-btn">&#11014;</div>
   <div id="fire-btn">&#127878;</div>
 </div>
 
@@ -145,9 +170,10 @@
   <h1>WORLD WAR MOUSE</h1>
   <p>You are a mouse soldier. The cat army has invaded — tanks shaped like cats
   with firework cannons in their mouths, deploying cat troopers across the field.</p>
-  <p>Scavenge <b style="color:#ff9d5c">fireworks</b> scattered on the map and fire them at the cats.
-  Fight your way to the castle and defeat the <b style="color:#ffd23f">CAT KING</b>.</p>
-  <p class="keys" id="controls-line">WASD — move &nbsp;|&nbsp; MOUSE / TRACKPAD — aim &nbsp;|&nbsp; CLICK or SPACE — fire &nbsp;|&nbsp; SHIFT — sprint</p>
+  <p>Scavenge <b style="color:#ff9d5c">fireworks</b> and fire them at the cats. Defend the
+  <b style="color:#9ecbff">MOUSE KING</b> in your house — if he falls, all is lost. Then fight
+  across the field and defeat the <b style="color:#ffd23f">CAT KING</b> in his castle.</p>
+  <p class="keys" id="controls-line">WASD — move &nbsp;|&nbsp; SPACE — jump &nbsp;|&nbsp; CLICK / F — fire &nbsp;|&nbsp; 1 / 2 — switch firework &nbsp;|&nbsp; SHIFT — sprint</p>
   <button id="start-btn">CLICK TO ENLIST</button>
 </div>
 

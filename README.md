@@ -14,22 +14,37 @@ step needed).
 | Control | Action |
 | --- | --- |
 | `W A S D` / arrows | Move |
-| Mouse | Aim camera |
-| Left click | Fire a firework rocket |
+| Mouse / trackpad | Aim camera (click on a cat to fire at it) |
+| Left click / `F` | Fire a firework rocket |
+| `Space` | Jump (parkour!) |
+| `1` / `2` / `Q` | Switch firework type |
 | `Shift` | Sprint |
 | `Esc` | Pause (release mouse) |
+
+On touch devices: virtual joystick to move, drag to aim, tap a cat to
+fire at it, plus on-screen fire and jump buttons.
 
 ## Rules
 
 - **Fireworks are ammo.** You start empty-handed. Pick up the firework
-  rockets glowing around the map (+4 rockets each) and find more when you
-  run out.
+  rockets glowing around the map (they respawn), plus the firework boxes
+  inside the mouse house. Blue **seeker fireworks** home in on the nearest
+  cat.
 - **Cat tanks** guard the way. Each one fires firework shells at you and
-  periodically deploys humanoid cat soldiers that chase and scratch you.
-- **You have a health bar.** Stay out of blast range; HP slowly regenerates
-  if you avoid damage for a few seconds.
+  periodically deploys humanoid cat soldiers. Two armored **imperial cat
+  guards** with spears protect the Cat King — tough, hard-hitting, slow.
+- **Protect the Mouse King!** He lives in the big mouse house at your end
+  of the map, patrolled by two royal mouse guards. Cat raiders will come
+  for him — if he falls, you lose.
+- **Allied mice** scavenge fireworks on their own and fire them at cats.
+- **Popcorn** in the house restores your HP, and HP slowly regenerates if
+  you avoid damage for a few seconds.
+- **Parkour** up the crates and ledges on the side of the house to reach
+  the rooftop — the Attic Conference of Mouse World Leaders has a gift for
+  anyone who makes the climb.
 - **Win** by reaching the castle at the far end of the battlefield and
-  destroying the Cat King (the big crowned tank). Lose if your HP hits zero.
+  destroying the Cat King (the big crowned tank). Lose if your HP hits
+  zero — or the Mouse King's does.
 
 ## Tech
 
