@@ -28,6 +28,11 @@
   .overlay button:active { transform: translateY(3px); box-shadow: 0 1px 0 #7a3b00; }
   .hidden { display: none !important; }
 
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 9;
+    background: radial-gradient(ellipse at center, transparent 58%, rgba(4, 8, 24, 0.32) 100%);
+  }
+
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
 
   /* --- touch controls --- */
@@ -135,6 +140,8 @@
 </head>
 <body>
 <canvas id="game-canvas"></canvas>
+
+<div id="vignette"></div>
 
 <div id="hud">
   <div id="crosshair"></div>
