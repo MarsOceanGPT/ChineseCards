@@ -1540,7 +1540,7 @@
     } else {
       var r = ROCKET_SPLASH + 1.5;
       d = Math.hypot(pos.x - player.pos.x, pos.z - player.pos.z);
-      if (d < r) hurtPlayer(Math.round(20 * (1 - d / r) + 5));
+      if (d < r) hurtPlayer(Math.round(13 * (1 - d / r) + 4));   // per-shell damage lowered — tanks fire volleys now
       for (k = allies.length - 1; k >= 0; k--) {
         d = Math.hypot(pos.x - allies[k].pos.x, pos.z - allies[k].pos.z);
         if (d < r) damageAlly(allies[k], Math.round(16 * (1 - d / r) + 4));
@@ -1949,7 +1949,7 @@
       showMessage('🐭🌍 You joined the Attic Conference of Mouse World Leaders! They gift you 3 seeker fireworks.', 5);
     }
 
-    // camera
+    // camera — with wall collision so the view never phases through geometry
     var camDist = 6.5;
     var cosP = Math.cos(pitch), sinP = Math.sin(pitch);
     var ax = -Math.sin(player.yaw) * cosP, ay = -sinP, az = -Math.cos(player.yaw) * cosP;
@@ -1957,6 +1957,13 @@
     var hx = player.pos.x + rvx * 0.9;
     var hy = player.pos.y + 1.9;
     var hz = player.pos.z + rvz * 0.9;
+    for (var cd = 0.8; cd <= camDist; cd += 0.25) {
+      var cpx = hx - ax * cd, cpy = hy - ay * cd + 0.5, cpz = hz - az * cd;
+      if (pointHitsObstacle(cpx, cpz, 0.3, cpy)) {
+        camDist = Math.max(1.2, cd - 0.4);
+        break;
+      }
+    }
     camera.position.set(hx - ax * camDist, hy - ay * camDist + 0.5, hz - az * camDist);
     if (camera.position.y < 0.4) camera.position.y = 0.4;
     if (shake > 0) {
@@ -2030,30 +2037,31 @@
       }
       var dx = player.pos.x - t.x, dz = player.pos.z - t.z;
       var dist = Math.hypot(dx, dz);
-      if (dist > t.range) return;
+      if (dist > (wrath ? 78 : t.range)) return;
 
       var targetYaw = Math.atan2(-dx, -dz);
       var diff = targetYaw - t.headYaw;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      t.headYaw += Math.max(-1.6 * dt, Math.min(1.6 * dt, diff));
+      t.headYaw += Math.max(-1.8 * dt, Math.min(1.8 * dt, diff));
       t.head.rotation.y = t.headYaw;
 
       t.fireTimer -= dt;
       if (t.fireTimer <= 0 && Math.abs(diff) < 0.25) {
-        t.fireTimer = t.isKing ? 2.2 : 3.2 + Math.random();
+        t.fireTimer = t.isKing ? 1.6 : 2.0 + Math.random() * 0.6;
         var muzzle = t.head.localToWorld(t.head.userData.muzzleLocal.clone());
+        // tight aim, then a fanned volley of shells
         var aim = new THREE.Vector3(
-          player.pos.x + (Math.random() - 0.5) * 3,
+          player.pos.x + (Math.random() - 0.5) * 1.2,
           player.pos.y + 1.2,
-          player.pos.z + (Math.random() - 0.5) * 3
+          player.pos.z + (Math.random() - 0.5) * 1.2
         ).sub(muzzle).normalize();
-        fireProjectile(muzzle, aim, false);
-        if (t.isKing) {
-          [-0.18, 0.18].forEach(function (a) {
-            var rot = aim.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a);
-            fireProjectile(muzzle.clone(), rot, false);
-          });
+        var up = new THREE.Vector3(0, 1, 0);
+        var shots = t.isKing ? 5 : 3;
+        var spreadTotal = t.isKing ? 0.22 : 0.11;
+        for (var si = 0; si < shots; si++) {
+          var off = (si / (shots - 1) - 0.5) * spreadTotal + (Math.random() - 0.5) * 0.02;
+          fireProjectile(muzzle.clone(), aim.clone().applyAxisAngle(up, off), false);
         }
         sfx.shoot();
         for (var s = 0; s < 8; s++) {
@@ -2087,8 +2095,31 @@
     }
   }
 
+  // royal wrath: approach (or wound) the Cat King and EVERY cat hunts you alone
+  var wrath = false;
+  function updateWrath() {
+    var wasWrath = wrath;
+    if (king.alive && state === 'playing') {
+      var d = Math.hypot(player.pos.x - king.x, player.pos.z - king.z);
+      wrath = d < 34 || king.hp < king.maxHp;
+    } else {
+      wrath = false;
+    }
+    if (wrath && !wasWrath) {
+      showMessage('😾 You dare approach the CAT KING?! Every cat on the field is coming for YOU!', 4);
+      sfx.meow();
+      setTimeout(function () { sfx.meow(); }, 220);
+      setTimeout(function () { sfx.meow(); }, 480);
+      soldiers.forEach(function (s) { s.stationed = false; });
+    }
+  }
+
   // pick what a cat foot unit should chase
   function catPickTarget(s) {
+    if (wrath) {
+      // the king's fury overrides every other order — hunt the player, only the player
+      return { pos: player.pos, hit: function (d) { hurtPlayer(d); }, aggro: 1e9 };
+    }
     if (s.mission === 'raid' && mouseKing.alive) {
       return { pos: mouseKing.pos, hit: function (d) { damageMouseKing(d); }, aggro: 1e9 };
     }
@@ -2104,6 +2135,8 @@
     if (best && bestD > 90) return null;
     return best;
   }
+
+  window.addEventListener('blur', function () { keys = {}; });
 
   function updateCatUnits(dt) {
     for (var k = soldiers.length - 1; k >= 0; k--) {
@@ -2398,6 +2431,7 @@
 
     if (state === 'playing') {
       elapsed += dt;
+      updateWrath();
       updatePlayer(dt);
       updatePickups(dt);
       updateTanks(dt);
