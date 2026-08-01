@@ -125,6 +125,152 @@
     }
   })();
 
+  // sun disc with a soft glow halo
+  function makeGlowTexture() {
+    var c = document.createElement('canvas');
+    c.width = c.height = 128;
+    var ctx = c.getContext('2d');
+    var grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.25, 'rgba(255,244,214,0.9)');
+    grad.addColorStop(0.6, 'rgba(255,230,170,0.28)');
+    grad.addColorStop(1, 'rgba(255,220,150,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+    var tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  var glowTex = makeGlowTexture();
+  var sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0xfff6d8, transparent: true, opacity: 1, depthWrite: false, fog: false
+  }));
+  sunSprite.position.set(110, 130, 60);
+  sunSprite.scale.setScalar(34);
+  scene.add(sunSprite);
+  var sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0xffe9b0, transparent: true, opacity: 0.4,
+    depthWrite: false, fog: false, blending: THREE.AdditiveBlending
+  }));
+  sunHalo.position.copy(sunSprite.position);
+  sunHalo.scale.setScalar(85);
+  scene.add(sunHalo);
+
+  // grass tufts + wildflowers (instanced, cheap)
+  (function scatterFlora() {
+    var rng2 = mulberry32(424242);
+    function okSpot(x, z) {
+      if (Math.abs(x) < 4.8) return false;                        // keep the dirt path clean
+      if (z > 92 && Math.abs(x) < 17) return false;               // house area
+      if (z < CASTLE_Z + 22 && Math.abs(x) < 28) return false;    // castle courtyard
+      return true;
+    }
+    var bladeCanvas = document.createElement('canvas');
+    bladeCanvas.width = bladeCanvas.height = 64;
+    var bctx = bladeCanvas.getContext('2d');
+    for (var b = 0; b < 15; b++) {
+      var bx = 8 + Math.random() * 48;
+      bctx.strokeStyle = ['#4e7c33', '#5f9240', '#6da34c', '#456f2d'][(Math.random() * 4) | 0];
+      bctx.lineWidth = 2 + Math.random() * 2;
+      bctx.beginPath();
+      bctx.moveTo(bx, 64);
+      bctx.quadraticCurveTo(bx + (Math.random() - 0.5) * 14, 34, bx + (Math.random() - 0.5) * 22, 6 + Math.random() * 16);
+      bctx.stroke();
+    }
+    var bladeTex = new THREE.CanvasTexture(bladeCanvas);
+    bladeTex.colorSpace = THREE.SRGBColorSpace;
+    var tuftGeo = new THREE.PlaneGeometry(1.0, 0.8);
+    var tuftMat = new THREE.MeshLambertMaterial({ map: bladeTex, alphaTest: 0.4, side: THREE.DoubleSide, transparent: false });
+    var TUFTS = IS_TOUCH ? 220 : 380;
+    var tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, TUFTS);
+    var m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), eul = new THREE.Euler();
+    var pv = new THREE.Vector3(), sc = new THREE.Vector3();
+    var placed = 0, tries = 0;
+    while (placed < TUFTS && tries++ < 6000) {
+      var x = (rng2() * 2 - 1) * (MAP_X - 2);
+      var z = MAP_Z_MIN + 6 + rng2() * (MAP_Z_MAX - MAP_Z_MIN - 12);
+      if (!okSpot(x, z)) continue;
+      var s = 0.7 + rng2() * 0.9;
+      eul.set(0, rng2() * Math.PI, 0);
+      q.setFromEuler(eul);
+      pv.set(x, 0.36 * s, z);
+      sc.set(s, s, s);
+      m4.compose(pv, q, sc);
+      tufts.setMatrixAt(placed++, m4);
+    }
+    tufts.count = placed;
+    scene.add(tufts);
+
+    var FLOWERS = IS_TOUCH ? 90 : 160;
+    var flowerGeo = new THREE.IcosahedronGeometry(0.1, 0);
+    var flowerMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    var flowers = new THREE.InstancedMesh(flowerGeo, flowerMat, FLOWERS);
+    var petal = new THREE.Color();
+    var palette = [0xff7b9c, 0xffd23f, 0xffffff, 0xc17bff, 0xff9d5c];
+    placed = 0; tries = 0;
+    while (placed < FLOWERS && tries++ < 4000) {
+      var fx = (rng2() * 2 - 1) * (MAP_X - 2);
+      var fz = MAP_Z_MIN + 6 + rng2() * (MAP_Z_MAX - MAP_Z_MIN - 12);
+      if (!okSpot(fx, fz)) continue;
+      pv.set(fx, 0.14, fz);
+      sc.setScalar(0.7 + rng2() * 0.7);
+      q.identity();
+      m4.compose(pv, q, sc);
+      flowers.setMatrixAt(placed, m4);
+      petal.set(palette[(rng2() * palette.length) | 0]);
+      flowers.setColorAt(placed++, petal);
+    }
+    flowers.count = placed;
+    scene.add(flowers);
+  })();
+
+  // butterflies fluttering around the meadow
+  var butterflies = [];
+  (function () {
+    var wingColors = [0xffa8c5, 0x9fd4ff, 0xfff3a0, 0xd4b5ff];
+    for (var b = 0; b < 6; b++) {
+      var g = new THREE.Group();
+      var mat = new THREE.MeshLambertMaterial({ color: wingColors[b % wingColors.length], side: THREE.DoubleSide });
+      var wings = [];
+      [-1, 1].forEach(function (s) {
+        var pivot = new THREE.Group();
+        var wing = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.26), mat);
+        wing.position.x = s * 0.18;
+        pivot.add(wing);
+        g.add(pivot);
+        wings.push(pivot);
+      });
+      g.userData = {
+        wings: wings,
+        cx: (Math.random() - 0.5) * 90,
+        cz: 20 + Math.random() * 80,
+        r: 6 + Math.random() * 14,
+        speed: 0.25 + Math.random() * 0.3,
+        phase: Math.random() * 20
+      };
+      scene.add(g);
+      butterflies.push(g);
+    }
+  })();
+
+  // castle war banners flanking the gate
+  (function () {
+    var bannerMat = new THREE.MeshLambertMaterial({ color: 0x8a2430, side: THREE.DoubleSide });
+    var poleMat = new THREE.MeshLambertMaterial({ color: 0x7c5a38 });
+    [-9, 9].forEach(function (bx) {
+      var pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 5.5, 6), poleMat);
+      pole.position.set(bx, 9 + 2.7, CASTLE_Z + 20);
+      scene.add(pole);
+      var banner = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 3), bannerMat);
+      banner.position.set(bx, 9 + 2.2, CASTLE_Z + 20.15);
+      scene.add(banner);
+      var sigil = new THREE.Mesh(new THREE.CircleGeometry(0.4, 3), new THREE.MeshLambertMaterial({ color: 0xffd23f, side: THREE.DoubleSide }));
+      sigil.position.set(bx, 9 + 2.2, CASTLE_Z + 20.25);
+      sigil.rotation.z = Math.PI;
+      scene.add(sigil);
+    });
+  })();
+
   // ---------- colliders ----------
   var obstacles = []; // ground-up columns {x, z, hx, hz, h}
   var platforms = []; // elevated walkable slabs {x, z, hx, hz, y}
@@ -427,13 +573,45 @@
       g.add(sash);
     }
     if (opts.armor) {
-      var plate = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 1.0), silverMat);
+      // full knightly plate: cuirass, great helm with red plume, pauldrons, shield
+      var plate = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.72, 1.0), silverMat);
       plate.position.y = 0.8;
       plate.castShadow = true;
       g.add(plate);
-      var pauldron = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.46, 0.24, 10), steelMat);
-      pauldron.position.set(0, 1.66, -0.25);
-      g.add(pauldron);
+      var trim = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.12, 1.04), goldMat);
+      trim.position.y = 0.52;
+      g.add(trim);
+      var helm = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.4, 0.4, 12), silverMat);
+      helm.position.set(0, 1.62, -0.25);
+      helm.castShadow = true;
+      g.add(helm);
+      var dome = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), steelMat);
+      dome.position.set(0, 1.82, -0.25);
+      dome.castShadow = true;
+      g.add(dome);
+      var visor = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.06), new THREE.MeshLambertMaterial({ color: 0x22262c }));
+      visor.position.set(0, 1.58, -0.62);
+      g.add(visor);
+      var plume = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.34, 0.55), new THREE.MeshLambertMaterial({ color: 0xc23040 }));
+      plume.position.set(0, 2.18, -0.18);
+      plume.rotation.x = -0.25;
+      plume.castShadow = true;
+      g.add(plume);
+      [-1, 1].forEach(function (s) {
+        var pauldron = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.22, 0.2, 8), steelMat);
+        pauldron.rotation.z = Math.PI / 2;
+        pauldron.position.set(s * 0.46, 1.22, 0);
+        pauldron.castShadow = true;
+        g.add(pauldron);
+      });
+      var shield = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.48), silverMat);
+      shield.position.set(-0.55, 1.0, -0.05);
+      shield.castShadow = true;
+      g.add(shield);
+      var emblem = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 10), goldMat);
+      emblem.rotation.z = Math.PI / 2;
+      emblem.position.set(-0.62, 1.0, -0.05);
+      g.add(emblem);
     }
     if (opts.spear) {
       var spear = new THREE.Group();
@@ -738,50 +916,107 @@
     }
   }
 
-  // ---------- audio ----------
-  var audioCtx = null;
+  // ---------- audio (layered synth SFX through a compressor bus) ----------
+  var audioCtx = null, masterBus = null;
   function audio() {
     if (!audioCtx) {
-      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { }
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterBus = audioCtx.createGain();
+        masterBus.gain.value = 0.8;
+        var comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -18;
+        comp.ratio.value = 8;
+        masterBus.connect(comp);
+        comp.connect(audioCtx.destination);
+      } catch (e) { }
     }
     return audioCtx;
   }
-  function playNoise(duration, volume, filterFreq) {
+  function playNoise(duration, volume, filterFreq, filterEnd, delay) {
     var ctx = audio(); if (!ctx) return;
+    var t0 = ctx.currentTime + (delay || 0);
     var len = Math.floor(ctx.sampleRate * duration);
     var buf = ctx.createBuffer(1, len, ctx.sampleRate);
     var data = buf.getChannelData(0);
     for (var k = 0; k < len; k++) data[k] = (Math.random() * 2 - 1) * (1 - k / len);
     var src = ctx.createBufferSource(); src.buffer = buf;
-    var filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = filterFreq;
+    var filt = ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.setValueAtTime(filterFreq, t0);
+    if (filterEnd) filt.frequency.exponentialRampToValueAtTime(Math.max(filterEnd, 40), t0 + duration);
     var gain = ctx.createGain(); gain.gain.value = volume;
-    src.connect(filt); filt.connect(gain); gain.connect(ctx.destination);
-    src.start();
+    src.connect(filt); filt.connect(gain); gain.connect(masterBus);
+    src.start(t0);
   }
-  function playTone(freq, endFreq, duration, volume, type) {
+  function playTone(freq, endFreq, duration, volume, type, delay) {
     var ctx = audio(); if (!ctx) return;
+    var t0 = ctx.currentTime + (delay || 0);
     var osc = ctx.createOscillator();
     osc.type = type || 'square';
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(endFreq, 1), ctx.currentTime + duration);
+    osc.frequency.setValueAtTime(freq, t0);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(endFreq, 1), t0 + duration);
     var gain = ctx.createGain();
-    gain.gain.setValueAtTime(volume, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.start(); osc.stop(ctx.currentTime + duration);
+    gain.gain.setValueAtTime(volume, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    osc.connect(gain); gain.connect(masterBus);
+    osc.start(t0); osc.stop(t0 + duration);
+  }
+  function playBend(points, duration, volume, type) {
+    // points: array of [timeFrac, freq] — pitch curve, e.g. a meow
+    var ctx = audio(); if (!ctx) return;
+    var t0 = ctx.currentTime;
+    var osc = ctx.createOscillator();
+    osc.type = type || 'sawtooth';
+    osc.frequency.setValueAtTime(points[0][1], t0);
+    for (var k = 1; k < points.length; k++) {
+      osc.frequency.exponentialRampToValueAtTime(points[k][1], t0 + duration * points[k][0]);
+    }
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.001, t0);
+    gain.gain.exponentialRampToValueAtTime(volume, t0 + duration * 0.15);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    osc.connect(gain); gain.connect(masterBus);
+    osc.start(t0); osc.stop(t0 + duration);
   }
   var sfx = {
-    shoot: function () { playNoise(0.25, 0.25, 2500); playTone(600, 120, 0.3, 0.12, 'sawtooth'); },
-    explode: function () { playNoise(0.5, 0.5, 900); playTone(160, 40, 0.4, 0.2, 'triangle'); },
-    pickup: function () { playTone(500, 900, 0.12, 0.15, 'square'); playTone(900, 1400, 0.15, 0.12, 'square'); },
-    munch: function () { playTone(300, 500, 0.1, 0.12, 'square'); playTone(400, 700, 0.12, 0.1, 'square'); },
-    hurt: function () { playTone(300, 90, 0.2, 0.2, 'sawtooth'); },
-    meow: function () { playTone(700, 350, 0.35, 0.1, 'sawtooth'); },
-    squeak: function () { playTone(1100, 1500, 0.12, 0.1, 'square'); },
-    jump: function () { playTone(350, 600, 0.15, 0.08, 'square'); },
+    shoot: function () {
+      playTone(140, 50, 0.18, 0.3, 'sine');                 // launch thump
+      playNoise(0.45, 0.3, 3400, 500);                       // whoosh tail
+      playTone(800, 130, 0.35, 0.08, 'sawtooth');
+    },
+    explode: function (vol) {
+      vol = vol === undefined ? 1 : vol;
+      if (vol < 0.05) return;
+      playTone(110, 26, 0.55, 0.5 * vol, 'sine');            // deep sub boom
+      playNoise(0.65, 0.5 * vol, 1400, 180);                 // blast wash
+      for (var k = 0; k < 5; k++) {                          // firework crackle tail
+        playNoise(0.05, 0.12 * vol, 2500 + Math.random() * 3000, null, 0.12 + Math.random() * 0.5);
+      }
+    },
+    pickup: function () {
+      [660, 880, 1320].forEach(function (f, k) { playTone(f, f, 0.12, 0.12, 'square', k * 0.06); });
+      playTone(2640, 3520, 0.2, 0.05, 'triangle', 0.18);
+    },
+    munch: function () {
+      playNoise(0.07, 0.25, 900);
+      playNoise(0.07, 0.22, 700, null, 0.12);
+      playNoise(0.09, 0.2, 500, null, 0.24);
+    },
+    hurt: function () { playTone(280, 70, 0.25, 0.22, 'sawtooth'); playNoise(0.15, 0.2, 800); },
+    meow: function () { playBend([[0, 480], [0.3, 820], [1, 300]], 0.45, 0.12, 'sawtooth'); },
+    squeak: function () { playBend([[0, 1300], [0.4, 1900], [1, 1100]], 0.18, 0.1, 'square'); },
+    clang: function () {
+      playTone(2350, 2100, 0.12, 0.1, 'square');
+      playTone(3620, 3200, 0.09, 0.06, 'square');
+      playNoise(0.06, 0.2, 8000);
+      playTone(160, 90, 0.1, 0.15, 'sine');
+    },
+    jump: function () { playTone(350, 600, 0.15, 0.07, 'square'); },
     fanfare: function () {
-      [523, 659, 784, 1047].forEach(function (f, k) {
-        setTimeout(function () { playTone(f, f, 0.25, 0.15, 'square'); }, k * 160);
+      [[523, 0], [659, 0.16], [784, 0.32], [1047, 0.48], [784, 0.72], [1047, 0.88]].forEach(function (n) {
+        playTone(n[0], n[0], 0.28, 0.13, 'square', n[1]);
+        playTone(n[0] / 2, n[0] / 2, 0.3, 0.08, 'triangle', n[1]);
       });
     }
   };
@@ -1288,7 +1523,8 @@
 
   function explode(pos, friendly) {
     fireworkExplosion(pos, !friendly);
-    sfx.explode();
+    var hearDist = Math.hypot(pos.x - player.pos.x, pos.z - player.pos.z);
+    sfx.explode(Math.max(0.12, 1 - hearDist / 80));
     shake = Math.min(shake + (friendly ? 0.15 : 0.3), 0.6);
     var k, d;
     if (friendly) {
@@ -1902,7 +2138,7 @@
       if (dist < SOLDIER_RANGE && s.attackTimer <= 0) {
         s.attackTimer = s.kind === 'catguard' ? 1.4 : 1.1;
         target.hit(s.dmg);
-        sfx.meow();
+        if (s.kind === 'catguard') sfx.clang(); else sfx.meow();
         s.pos.x += (dx / dist) * 0.4;
         s.pos.z += (dz / dist) * 0.4;
       }
@@ -1933,7 +2169,8 @@
         } else if (g.cool <= 0) {
           g.cool = 1.2;
           damageSoldierObj(threat, MOUSE_GUARD_DAMAGE);
-          sfx.squeak();
+          sfx.clang();
+          sparkBurst(threat.pos.clone().setY(1.2), 8, 0.12, 4, 0.3, 0.3);
         }
       } else if (mouseKing.alive) {
         // patrol a slow circle around the king
@@ -2092,9 +2329,13 @@
     var q = camera.quaternion;
     tanks.forEach(function (t) { if (t.alive) t.bar.quaternion.copy(q); });
     soldiers.forEach(function (s) { s.bar.quaternion.copy(q); });
-    allies.forEach(function (a) { a.bar.quaternion.copy(q); });
-    mouseGuards.forEach(function (g) { g.bar.quaternion.copy(q); });
-    if (mouseKing.alive) mouseKing.bar.quaternion.copy(q);
+    // friendly bars only appear once they've taken damage
+    allies.forEach(function (a) { a.bar.visible = a.hp < a.maxHp; a.bar.quaternion.copy(q); });
+    mouseGuards.forEach(function (g) { g.bar.visible = g.hp < g.maxHp; g.bar.quaternion.copy(q); });
+    if (mouseKing.alive) {
+      mouseKing.bar.visible = mouseKing.hp < mouseKing.maxHp;
+      mouseKing.bar.quaternion.copy(q);
+    }
   }
 
   function updateAmbient(dt) {
@@ -2102,6 +2343,27 @@
       c.mesh.position.x += c.speed * dt;
       if (c.mesh.position.x > 140) c.mesh.position.x = -140;
     });
+    // butterflies flutter along wandering loops
+    butterflies.forEach(function (b) {
+      var u = b.userData;
+      var t = elapsed * u.speed + u.phase;
+      var nx = u.cx + Math.cos(t) * u.r;
+      var nz = u.cz + Math.sin(t * 0.7) * u.r;
+      var ny = 1.1 + Math.sin(t * 2.3) * 0.5;
+      b.rotation.y = Math.atan2(-(nx - b.position.x), -(nz - b.position.z));
+      b.position.set(nx, ny, nz);
+      var flap = Math.sin(elapsed * 16 + u.phase) * 0.9;
+      u.wings[0].rotation.z = flap;
+      u.wings[1].rotation.z = -flap;
+    });
+    // fireflies drift around the mouse house
+    if (Math.random() < dt * 10) {
+      tmpColor.setHSL(0.18 + Math.random() * 0.1, 1, 0.6);
+      spawnParticle(
+        new THREE.Vector3(HOUSE_X + (Math.random() - 0.5) * 34, 0.8 + Math.random() * 4, HOUSE_Z - 10 + (Math.random() - 0.5) * 16),
+        new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.3 + Math.random() * 0.4, (Math.random() - 0.5) * 0.6),
+        tmpColor.clone(), 1.6, { gravity: -0.1, size: 0.22, endSize: 0.05, fade: 1.2 });
+    }
     // king idles; attic leaders bob when the conference has been joined
     if (mouseKing.alive) {
       mouseKing.t += dt;
