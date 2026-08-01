@@ -14,9 +14,9 @@
   var ROCKET_SPEED = 45, ROCKET_DAMAGE = 40, ROCKET_SPLASH = 4.5;
   var SEEKER_SPEED = 32, SEEKER_TURN = 4.5;
   var SHELL_SPEED = 26;
-  var TANK_HP = 100, SOLDIER_HP = 20, KING_HP = 400;
+  var TANK_HP = 100, SOLDIER_HP = 20, KING_HP = 1000;
   var SOLDIER_SPEED = 6.2, SOLDIER_DAMAGE = 8, SOLDIER_RANGE = 2.4;
-  var GUARD_HP = 130, GUARD_DAMAGE = 20, GUARD_SPEED = 4.4;
+  var GUARD_HP = 200, GUARD_DAMAGE = 24, GUARD_SPEED = 4.4;
   var MOUSE_KING_HP = 250;
   var MOUSE_GUARD_HP = 140, MOUSE_GUARD_DAMAGE = 24;
   var ALLY_HP = 40;
@@ -1247,6 +1247,9 @@
       isKing: isKing,
       headYaw: 0,
       fireTimer: 2 + Math.random() * 2,
+      reload: opts.reload || 2.0,
+      deployTime: opts.deploy || 8,
+      deployCap: opts.cap !== undefined ? opts.cap : 3,
       deployTimer: isKing ? 6 : 4 + Math.random() * 4,
       range: isKing ? 55 : 48,
       flash: 0,
@@ -1258,11 +1261,7 @@
     return tank;
   }
 
-  spawnTank(-24, 44);
-  spawnTank(22, 8);
-  spawnTank(-14, -34);
-  spawnTank(20, -62);
-  var king = spawnTank(0, CASTLE_Z - 8, { king: true });
+  var king = null; // the Cat King only takes the field in level 3
 
   function buildCatSoldier(guard) {
     var g = new THREE.Group();
@@ -1353,11 +1352,46 @@
     if (!isGuard) fireworkExplosion(new THREE.Vector3(x, 1, z), false);
   }
 
-  // castle gate guards + imperial guards flanking the cat king
-  spawnSoldier(-4, CASTLE_Z + 24, null);
-  spawnSoldier(4, CASTLE_Z + 24, null);
-  spawnSoldier(-5.5, CASTLE_Z - 2, null, { guard: true });
-  spawnSoldier(5.5, CASTLE_Z - 2, null, { guard: true });
+  // ---------- level progression ----------
+  var level = 0;
+  var levelTransition = 0;
+  var ALL_TANK_SPOTS = [[-24, 44], [22, 8], [34, 26], [-38, 2], [-14, -34], [20, -62], [-10, -70], [14, -78]];
+  var objectiveEl = document.getElementById('objective');
+  function setObjective(text) { objectiveEl.textContent = text; }
+
+  function startLevel(n) {
+    level = n;
+    if (n === 1) {
+      setObjective('LEVEL 1 · SKIRMISH — wipe out the cat scout patrol!');
+      spawnTank(-24, 44, { reload: 2.8, deploy: 11, cap: 2 });
+      spawnTank(22, 8, { reload: 2.8, deploy: 11, cap: 2 });
+    } else if (n === 2) {
+      setObjective('LEVEL 2 · INVASION — destroy the cat armor column!');
+      showMessage('⚠ LEVEL 2 — THE INVASION BEGINS! Cat armor is rolling in!', 4.5);
+      spawnTank(34, 26, { reload: 2.2, deploy: 8, cap: 3 });
+      spawnTank(-38, 2, { reload: 2.2, deploy: 8, cap: 3 });
+      spawnTank(-14, -34, { reload: 2.2, deploy: 8, cap: 3 });
+      spawnTank(20, -62, { reload: 2.2, deploy: 8, cap: 3 });
+      raidTimer = 26;
+      player.hp = Math.min(PLAYER_MAX_HP, player.hp + 40);
+      sfx.meow();
+    } else if (n === 3) {
+      setObjective('LEVEL 3 · THE CAT KING — storm the castle and end this war!');
+      showMessage('👑 LEVEL 3 — THE CAT KING HAS ARRIVED AT HIS CASTLE!', 5);
+      king = spawnTank(0, CASTLE_Z - 8, { king: true });
+      spawnSoldier(-5.5, CASTLE_Z - 2, null, { guard: true });
+      spawnSoldier(5.5, CASTLE_Z - 2, null, { guard: true });
+      spawnSoldier(-4, CASTLE_Z + 24, null);
+      spawnSoldier(4, CASTLE_Z + 24, null);
+      spawnTank(-10, -70, { reload: 2.0, deploy: 7, cap: 3 });
+      spawnTank(14, -78, { reload: 2.0, deploy: 7, cap: 3 });
+      raidTimer = 35;
+      player.hp = Math.min(PLAYER_MAX_HP, player.hp + 40);
+      sfx.meow();
+      setTimeout(function () { sfx.meow(); }, 250);
+    }
+    updateHud();
+  }
 
   // ---------- level scatter ----------
   var rng = mulberry32(20260731);
@@ -1366,8 +1400,8 @@
     var all = PICKUP_SPOTS.concat(SEEKER_SPOTS);
     for (var k = 0; k < all.length; k++)
       if (Math.hypot(x - all[k][0], z - all[k][1]) < minD) return false;
-    for (k = 0; k < tanks.length; k++)
-      if (Math.hypot(x - tanks[k].x, z - tanks[k].z) < minD + 4) return false;
+    for (k = 0; k < ALL_TANK_SPOTS.length; k++)
+      if (Math.hypot(x - ALL_TANK_SPOTS[k][0], z - ALL_TANK_SPOTS[k][1]) < minD + 4) return false;
     if (z < CASTLE_Z + 22 && Math.abs(x) < 28) return false;
     if (z > HOUSE_Z - 14 && Math.abs(x) < 20) return false;   // keep the house area clear
     if (Math.abs(x) < 5) return false;                        // keep the main path clear
@@ -1456,9 +1490,17 @@
       if (t.isKing) winGame();
       else {
         var left = tanks.filter(function (x) { return x.alive && !x.isKing; }).length;
-        showMessage(left > 0
-          ? 'Cat tank destroyed! ' + left + ' more guarding the way.'
-          : 'All field tanks down! Storm the castle and defeat the CAT KING!', 3.5);
+        if (left > 0) {
+          showMessage('Cat tank destroyed! ' + left + ' more to go.', 3);
+        } else if (level === 1) {
+          showMessage('☑ SKIRMISH WON! But scouts were only the beginning... brace for the INVASION!', 5);
+          levelTransition = 6;
+        } else if (level === 2) {
+          showMessage('☑ INVASION REPELLED! A royal warhorn echoes... the CAT KING approaches!', 5);
+          levelTransition = 6;
+        } else if (king && king.alive) {
+          showMessage('The escort is down! Storm the castle and destroy the CAT KING!', 4);
+        }
       }
     }
   }
@@ -1802,7 +1844,7 @@
     ammoNormalEl.textContent = player.ammo;
     ammoSeekerEl.textContent = player.seekers;
     mkBar.style.width = Math.max(0, (mouseKing.hp / mouseKing.maxHp) * 100) + '%';
-    if (king.alive && Math.hypot(player.pos.x - king.x, player.pos.z - king.z) < 65) {
+    if (king && king.alive && Math.hypot(player.pos.x - king.x, player.pos.z - king.z) < 65) {
       kingWrap.classList.remove('hidden');
       kingBar.style.width = Math.max(0, (king.hp / king.maxHp) * 100) + '%';
     } else {
@@ -2048,7 +2090,7 @@
 
       t.fireTimer -= dt;
       if (t.fireTimer <= 0 && Math.abs(diff) < 0.25) {
-        t.fireTimer = t.isKing ? 1.6 : 2.0 + Math.random() * 0.6;
+        t.fireTimer = t.isKing ? 1.6 : t.reload + Math.random() * 0.6;
         var muzzle = t.head.localToWorld(t.head.userData.muzzleLocal.clone());
         // tight aim, then a fanned volley of shells
         var aim = new THREE.Vector3(
@@ -2073,18 +2115,19 @@
 
       t.deployTimer -= dt;
       if (t.deployTimer <= 0) {
-        t.deployTimer = t.isKing ? 9 : 8 + Math.random() * 3;
-        if (t.mySoldiers < 3) {
+        t.deployTimer = (t.isKing ? 9 : t.deployTime) + Math.random() * 3;
+        if (t.mySoldiers < t.deployCap) {
           spawnSoldier(t.x + (Math.random() - 0.5) * 3, t.z + 4 * t.scale, t);
           sfx.meow();
         }
       }
     });
 
-    // periodic raid on the mouse king
+    // periodic raid on the mouse king (level 2 onward)
+    if (level < 2) return;
     raidTimer -= dt;
     if (raidTimer <= 0) {
-      raidTimer = 48;
+      raidTimer = level === 2 ? 36 : 45;
       var aliveTanks = tanks.filter(function (t) { return t.alive && !t.isKing; });
       if (aliveTanks.length && mouseKing.alive) {
         var t = aliveTanks[(Math.random() * aliveTanks.length) | 0];
@@ -2099,7 +2142,7 @@
   var wrath = false;
   function updateWrath() {
     var wasWrath = wrath;
-    if (king.alive && state === 'playing') {
+    if (king && king.alive && state === 'playing') {
       var d = Math.hypot(player.pos.x - king.x, player.pos.z - king.z);
       wrath = d < 34 || king.hp < king.maxHp;
     } else {
@@ -2144,7 +2187,7 @@
 
       // imperial guards hold their post until provoked
       if (s.stationed) {
-        var provoked = s.hp < s.maxHp || (king.alive && king.hp < king.maxHp) ||
+        var provoked = s.hp < s.maxHp || (king && king.alive && king.hp < king.maxHp) ||
           Math.hypot(player.pos.x - s.pos.x, player.pos.z - s.pos.z) < 22;
         if (!provoked) {
           s.mesh.position.copy(s.pos);
@@ -2260,16 +2303,24 @@
           var d = Math.hypot(s.pos.x - a.pos.x, s.pos.z - a.pos.z);
           if (d < td) { td = d; tgt = new THREE.Vector3(s.pos.x, 1.1, s.pos.z); }
         });
-        if (tgt && td < 50) {
+        if (tgt && td < 32) {
           a.mesh.rotation.y = Math.atan2(-(tgt.x - a.pos.x), -(tgt.z - a.pos.z));
           if (a.cool <= 0) {
-            a.cool = 2.6;
-            a.ammo--;
-            var origin = a.pos.clone().add(new THREE.Vector3(0, 1.3, 0));
-            var dir = tgt.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2))
-              .sub(origin).normalize();
-            fireProjectile(origin.add(dir.clone().multiplyScalar(0.8)), dir, true);
-            sfx.squeak();
+            // allies are enthusiastic but not exactly marksmice: slow reload,
+            // wild aim, and sometimes they just fumble the launch entirely
+            if (Math.random() < 0.3) {
+              a.cool = 1.4;
+              sfx.squeak();
+            } else {
+              a.cool = 4.2 + Math.random() * 1.6;
+              a.ammo--;
+              var origin = a.pos.clone().add(new THREE.Vector3(0, 1.3, 0));
+              var dir = tgt.clone().add(new THREE.Vector3(
+                (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 6))
+                .sub(origin).normalize();
+              fireProjectile(origin.add(dir.clone().multiplyScalar(0.8)), dir, true);
+              sfx.squeak();
+            }
           }
         } else {
           var pdx = player.pos.x - a.pos.x, pdz = player.pos.z - a.pos.z;
@@ -2431,6 +2482,10 @@
 
     if (state === 'playing') {
       elapsed += dt;
+      if (levelTransition > 0) {
+        levelTransition -= dt;
+        if (levelTransition <= 0) startLevel(level + 1);
+      }
       updateWrath();
       updatePlayer(dt);
       updatePickups(dt);
@@ -2459,6 +2514,7 @@
 
   camera.position.set(10, 7, 122);
   camera.lookAt(0, 3, 90);
+  startLevel(1);
   updateHud();
   setWeapon('normal');
   requestAnimationFrame(loop);
@@ -2466,7 +2522,10 @@
   // small debug/testing handle
   window.WWM = {
     player: player, tanks: tanks, soldiers: soldiers, allies: allies,
-    mouseKing: mouseKing, mouseGuards: mouseGuards, king: king, camera: camera,
-    pickups: pickups, getState: function () { return state; }
+    mouseKing: mouseKing, mouseGuards: mouseGuards, camera: camera,
+    pickups: pickups, damageTank: damageTank,
+    getKing: function () { return king; },
+    getLevel: function () { return level; },
+    getState: function () { return state; }
   };
 })();
