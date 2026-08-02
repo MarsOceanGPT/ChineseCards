@@ -60,7 +60,11 @@
       achTitle: 'ACHIEVEMENTS',
       achWin: 'First Victory', achRankS: 'S-Rank Commander', achAttic: 'Attic VIP',
       achStomp: 'Cat Stomper', achSharp: 'Sharpshooter', achWave5: 'Endless Survivor',
-      msgTrap: '⚠ You fell into the cat army\'s trap trench! Find the hidden ladder!'
+      msgTrap: '⚠ You fell into the cat army\'s trap trench! Find the hidden ladder!',
+      msgRevive: '👑 The Mouse King\'s blessing revives you! (once per battle, -500 pts)',
+      msgRapid: '🔥 FIREWORK FRENZY! Triple fire rate for 12 seconds!',
+      msgRelief: '🎁 Supply wave! The mouse quartermaster sends aid.',
+      eliteSwift: 'SWIFT CAT', eliteBoomer: 'BOOM CAT'
     },
     zh: {
       subtitle: '世 界 大 战 鼠',
@@ -116,7 +120,11 @@
       achTitle: '成就',
       achWin: '首胜将军', achRankS: 'S级指挥官', achAttic: '阁楼贵宾',
       achStomp: '猫猫踩踏机', achSharp: '神射手', achWave5: '无尽生存者',
-      msgTrap: '⚠ 掉进了猫军的陷阱壕沟!快找到那把隐藏的梯子!'
+      msgTrap: '⚠ 掉进了猫军的陷阱壕沟!快找到那把隐藏的梯子!',
+      msgRevive: '👑 鼠国王的祝福让你复活了!(每局一次,-500 分)',
+      msgRapid: '🔥 烟花狂热!12 秒内射速×3!',
+      msgRelief: '🎁 补给波!鼠军需官送来了援助。',
+      eliteSwift: '疾风猫', eliteBoomer: '自爆猫'
     }
   };
   var LANG = (function () {
@@ -146,6 +154,24 @@
     if (DIFF_TABLE[savedDiff]) difficulty = savedDiff;
   } catch (e) { }
   function DIFF() { return DIFF_TABLE[difficulty]; }
+
+  // ---------- invisible adaptive difficulty (rubber band) ----------
+  // reads how the battle is going and quietly nudges enemy power within
+  // [0.78 .. 1.3] so the game stays in the "one more try" flow zone
+  var dda = 1, ddaTimer = 0;
+  function updateDDA(dt) {
+    ddaTimer += dt;
+    if (ddaTimer < 5) return;
+    ddaTimer = 0;
+    var nudge = 0;
+    if (player.hp < 35) nudge -= 0.06;
+    else if (player.hp > 80) nudge += 0.03;
+    if (mouseKing.alive && mouseKing.hp < mouseKing.maxHp * 0.5) nudge -= 0.04;
+    var acc = stats.shots > 5 ? stats.hits / stats.shots : 0.5;
+    if (acc > 0.55) nudge += 0.02;
+    else if (acc < 0.3) nudge -= 0.02;
+    dda = Math.max(0.78, Math.min(1.3, dda + nudge));
+  }
 
   // ---------- achievements ----------
   var ACH_KEYS = ['achWin', 'achRankS', 'achAttic', 'achStomp', 'achSharp', 'achWave5'];
@@ -1421,6 +1447,7 @@
     seekers: 0,
     weapon: 'normal',
     velX: 0, velZ: 0, velY: 0,
+    rapidT: 0,
     grounded: true,
     yaw: 0,           // face the battlefield on spawn
     lastHurt: -10,
@@ -1709,11 +1736,33 @@
 
   var king = null; // the Cat King only takes the field in level 3
 
-  function buildCatSoldier(guard) {
+  function buildCatSoldier(guard, variant) {
     var g = new THREE.Group();
-    var body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.32), furMat);
+    var body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.32),
+      variant === 'boomer' ? new THREE.MeshLambertMaterial({ color: 0xc84838, emissive: 0x4a0d08 }) : furMat);
     body.position.y = 0.95; body.castShadow = true;
     g.add(body);
+    if (variant === 'swift') {
+      var scarf = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.14, 0.4),
+        new THREE.MeshLambertMaterial({ color: 0x39c8e8 }));
+      scarf.position.y = 1.32;
+      g.add(scarf);
+      var tail1 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.4, 0.06),
+        new THREE.MeshLambertMaterial({ color: 0x39c8e8 }));
+      tail1.position.set(0.2, 1.15, 0.24);
+      tail1.rotation.x = 0.5;
+      g.add(tail1);
+    }
+    if (variant === 'boomer') {
+      var fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 5),
+        new THREE.MeshLambertMaterial({ color: 0x222222 }));
+      fuse.position.y = 2.05;
+      g.add(fuse);
+      var sparkTip = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5),
+        new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0xcc8800 }));
+      sparkTip.position.y = 2.22;
+      g.add(sparkTip);
+    }
     if (guard) {
       var plate = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.68, 0.42), silverMat);
       plate.position.y = 1.0; plate.castShadow = true;
@@ -1772,25 +1821,29 @@
     var isGuard = !!opts.guard;
     if (!isGuard) {
       var catCount = soldiers.filter(function (s) { return s.kind === 'cat'; }).length;
-      var cap = endless ? Math.min(8 * Math.pow(2, wave - 1), 24) : MAX_SOLDIERS;
+      var cap = endless ? Math.min(8 + wave * 3, 24) : MAX_SOLDIERS;
       if (catCount >= cap) return;
     }
-    var mesh = buildCatSoldier(isGuard);
+    var variant = opts.variant || null;
+    var mesh = buildCatSoldier(isGuard, variant);
     mesh.position.set(x, 0, z);
     scene.add(mesh);
     var bar = buildHpBar(0.9, isGuard ? 2.5 : 2.2);
     mesh.add(bar);
     var mul = fromTank ? fromTank.dmgMul : (opts.dmgMul || 1);
     var rate = fromTank ? fromTank.rateMul : (opts.rateMul || 1);
+    var hp = isGuard ? GUARD_HP : (variant === 'swift' ? 14 : variant === 'boomer' ? 26 : SOLDIER_HP);
     soldiers.push({
       kind: isGuard ? 'catguard' : 'cat',
+      variant: variant,
+      dmgMulStored: Math.min(mul, 4),
       mesh: mesh, bar: bar,
       pos: new THREE.Vector3(x, 0, z),
-      hp: isGuard ? GUARD_HP : SOLDIER_HP,
-      maxHp: isGuard ? GUARD_HP : SOLDIER_HP,
+      hp: hp,
+      maxHp: hp,
       dmg: Math.round((isGuard ? GUARD_DAMAGE : SOLDIER_DAMAGE) * mul),
       atkCd: (isGuard ? 1.4 : 1.1) / rate,
-      speed: isGuard ? GUARD_SPEED : SOLDIER_SPEED,
+      speed: (isGuard ? GUARD_SPEED : SOLDIER_SPEED) * (variant === 'swift' ? 1.9 : variant === 'boomer' ? 0.85 : 1),
       attackTimer: 0,
       walkT: Math.random() * 10,
       fromTank: fromTank || null,
@@ -1811,20 +1864,27 @@
     currentObjectiveKey = null;
     objectiveEl.textContent = T('objEndless', wave);
     showBanner(T('bannerEndless', wave));
-    // every wave the horde DOUBLES: count, fire rate, and damage
-    var mul = Math.pow(2, wave - 1);
-    var count = Math.min(2 * mul, 8);
-    if (wave >= 2) showMessage(T('msgWaveBuff', wave, mul), 4);
+    // the horde grows every wave (x1.5 power curve — a wall you can climb),
+    // and every 3rd wave the quartermaster sends a relief shipment
+    var mul = Math.pow(1.5, wave - 1);
+    var count = Math.min(2 * wave, 8);
+    if (wave >= 2) showMessage(T('msgWaveBuff', wave, Math.round(mul * 10) / 10), 4);
     var spots = ALL_TANK_SPOTS.slice().sort(function () { return Math.random() - 0.5; }).slice(0, count);
     spots.forEach(function (s) {
       spawnTank(s[0], s[1], {
-        reload: Math.max(0.5, 2.4 / mul),
-        deploy: Math.max(2, 9 / mul),
-        cap: Math.min(3 * mul, 12),
+        reload: Math.max(0.6, 2.4 / mul),
+        deploy: Math.max(2.5, 9 / mul),
+        cap: Math.min(Math.round(3 * mul), 12),
         dmgMul: mul,
         rateMul: mul
       });
     });
+    if (wave % 3 === 0) {
+      player.hp = Math.min(PLAYER_MAX_HP, player.hp + 30);
+      spawnDrop();
+      spawnDrop();
+      showMessage(T('msgRelief'), 4);
+    }
     if (wave >= 5) unlockAch('achWave5');
     sfx.horn();
   }
@@ -2099,12 +2159,14 @@
       if (idx >= 0) {
         fireworkExplosion(s.pos.clone().setY(1.2), false);
         stats.cats++;
-        addScore(s.kind === 'catguard' ? 150 : 50, s.pos.clone().setY(1.6));
+        addScore(s.kind === 'catguard' ? 150 : (s.variant ? 100 : 50), s.pos.clone().setY(1.6));
         spawnFloatText('😿', s.pos.clone().setY(2.6), '#fff');
         registerKill();
         if (s.fromTank) s.fromTank.mySoldiers--;
         scene.remove(s.mesh);
         soldiers.splice(idx, 1);
+        // boom cats go out with a bang — dangerous to everyone nearby
+        if (s.variant === 'boomer') explode(s.pos.clone().setY(1), false, s.dmgMulStored);
       }
     }
   }
@@ -2408,7 +2470,7 @@
     }
     if (isSeeker) player.seekers--; else player.ammo--;
     stats.shots++;
-    player.fireCooldown = 0.45;
+    player.fireCooldown = player.rapidT > 0 ? 0.16 : 0.45;
     var muzzle = player.pos.clone().add(new THREE.Vector3(0, 1.5, 0));
     var shootDir;
     if (!targetPos) targetPos = enemyTargetAt(window.innerWidth / 2, window.innerHeight / 2);
@@ -2468,15 +2530,32 @@
 
   function hurtPlayer(dmg) {
     if (state !== 'playing') return;
-    player.hp -= Math.max(1, Math.round(dmg * DIFF().dmg));
+    player.hp -= Math.max(1, Math.round(dmg * DIFF().dmg * dda));
     player.lastHurt = elapsed;
     sfx.hurt();
     damageFlash.style.opacity = '1';
     setTimeout(function () { damageFlash.style.opacity = '0'; }, 130);
     shake = Math.min(shake + 0.25, 0.6);
     updateHud();
-    if (player.hp <= 0) loseGame(T('loseCaught'));
+    if (player.hp <= 0) {
+      if (!reviveUsed) {
+        // the Mouse King's blessing: one second chance per battle
+        reviveUsed = true;
+        player.hp = 60;
+        player.pos.set(HOUSE_X, 0, HOUSE_Z - 2);
+        player.velX = 0; player.velZ = 0; player.velY = 0;
+        stats.score = Math.max(0, stats.score - 500);
+        scoreValEl.textContent = stats.score;
+        fireworkExplosion(player.pos.clone().setY(2), true);
+        showMessage(T('msgRevive'), 5);
+        sfx.fanfare();
+        updateHud();
+        return;
+      }
+      loseGame(T('loseCaught'));
+    }
   }
+  var reviveUsed = false;
 
   // ---------- screens / state ----------
   var state = 'start';
@@ -2772,6 +2851,16 @@
     if (player.grounded && moving) player.mesh.position.y = player.pos.y + Math.abs(Math.sin(elapsed * 10)) * 0.12;
 
     player.fireCooldown = Math.max(0, player.fireCooldown - dt);
+    if (player.rapidT > 0) {
+      player.rapidT -= dt;
+      // sparking launcher while the frenzy lasts
+      if (Math.random() < dt * 20) {
+        tmpColor.setHSL(0.08, 1, 0.6);
+        spawnParticle(player.pos.clone().add(new THREE.Vector3(0.45, 1.5, 0)),
+          new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2),
+          tmpColor.clone(), 0.4, { gravity: 2, size: 0.3, endSize: 0.08 });
+      }
+    }
     if (player.hp < PLAYER_MAX_HP && elapsed - player.lastHurt > 6) {
       player.hp = Math.min(PLAYER_MAX_HP, player.hp + 2.5 * DIFF().regen * dt);
     }
@@ -2863,7 +2952,13 @@
           player.seekers += 1;
           player.hp = Math.min(PLAYER_MAX_HP, player.hp + 15);
           sfx.pickup();
-          showMessage(T('msgDropGot'), 2.5);
+          if (Math.random() < 0.3) {
+            player.rapidT = 12;
+            showMessage(T('msgRapid'), 3);
+            sfx.fanfare();
+          } else {
+            showMessage(T('msgDropGot'), 2.5);
+          }
         } else if (p.type === 'seeker' || p.type === 'seekerbox') {
           player.seekers += p.amount;
           sfx.pickup();
@@ -2912,7 +3007,7 @@
 
       t.fireTimer -= dt;
       if (t.fireTimer <= 0 && Math.abs(diff) < 0.25) {
-        t.fireTimer = (t.isKing ? (t.enraged ? 1.0 : 1.6) : t.reload + Math.random() * 0.6) * DIFF().reload / t.rateMul;
+        t.fireTimer = (t.isKing ? (t.enraged ? 1.0 : 1.6) : t.reload + Math.random() * 0.6) * DIFF().reload / t.rateMul / dda;
         var muzzle = t.head.localToWorld(t.head.userData.muzzleLocal.clone());
         // tight aim, then a fanned volley of shells
         var aim = new THREE.Vector3(
@@ -2939,7 +3034,10 @@
       if (t.deployTimer <= 0) {
         t.deployTimer = (t.isKing ? 9 : t.deployTime) + Math.random() * 3;
         if (t.mySoldiers < t.deployCap) {
-          spawnSoldier(t.x + (Math.random() - 0.5) * 3, t.z + 4 * t.scale, t);
+          // elite variants mix in as the war escalates (and as you dominate)
+          var eliteChance = (endless ? Math.min(0.12 * wave, 0.55) : (level - 1) * 0.12) * dda;
+          var variant = Math.random() < eliteChance ? (Math.random() < 0.5 ? 'swift' : 'boomer') : null;
+          spawnSoldier(t.x + (Math.random() - 0.5) * 3, t.z + 4 * t.scale, t, { variant: variant });
           sfx.meow();
         }
       }
@@ -3041,6 +3139,11 @@
       s.attackTimer -= dt;
       // can't claw what's a whole trench-height above you
       var dyOk = Math.abs((target.pos.y || 0) - s.pos.y) < 1.8;
+      if (s.variant === 'boomer' && dist < 2.4 && dyOk) {
+        // boom cats don't claw — they detonate
+        damageSoldierObj(s, 9999);
+        continue;
+      }
       if (dist < SOLDIER_RANGE && dyOk && s.attackTimer <= 0) {
         s.attackTimer = s.atkCd;
         target.hit(s.dmg);
@@ -3334,10 +3437,11 @@
       }
       dropTimer -= dt;
       if (dropTimer <= 0) {
-        dropTimer = 42 + Math.random() * 16;
+        dropTimer = (42 + Math.random() * 16) * dda;   // struggling players get supplies sooner
         spawnDrop();
         showMessage(T('msgDrop'), 3);
       }
+      updateDDA(dt);
       updateDrops(dt);
       updateWrath();
       updatePlayer(dt);
@@ -3437,7 +3541,9 @@
   window.WWM = {
     player: player, tanks: tanks, soldiers: soldiers, allies: allies,
     mouseKing: mouseKing, mouseGuards: mouseGuards, camera: camera,
-    pickups: pickups, damageTank: damageTank,
+    pickups: pickups, damageTank: damageTank, spawnSoldier: spawnSoldier,
+    hurtPlayer: hurtPlayer,
+    getDda: function () { return dda; },
     getKing: function () { return king; },
     getLevel: function () { return level; },
     getState: function () { return state; }
