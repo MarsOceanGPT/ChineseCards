@@ -1,0 +1,9 @@
+{
+  "appId": "com.marsocean.worldwarmouse",
+  "appName": "World War Mouse",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "backgroundColor": "#101726"
+}

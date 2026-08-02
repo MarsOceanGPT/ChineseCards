@@ -1,0 +1,16 @@
+{
+  "name": "World War Mouse 世界大战鼠",
+  "short_name": "WWMouse",
+  "description": "A mouse soldier armed with fireworks defends the Mouse King and storms the Cat King's castle. 小老鼠士兵用烟花大战猫猫军团!",
+  "start_url": ".",
+  "scope": ".",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#101726",
+  "theme_color": "#101726",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
