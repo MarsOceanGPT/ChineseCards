@@ -53,6 +53,7 @@
       objEndless: 'ENDLESS · WAVE {0} — survive!',
       bannerEndless: 'WAVE {0}',
       msgWaveClear: '☑ Wave cleared! +300 — next wave incoming...',
+      msgWaveBuff: '⚠ WAVE {0}: the horde is ×{1} stronger — count, speed, and damage DOUBLED!',
       msgDrop: '📦 Supply drop incoming!',
       msgDropGot: '📦 Supplies! +5 rockets, +1 seeker, +15 HP',
       achUnlock: '🏅 Achievement unlocked: {0}',
@@ -108,6 +109,7 @@
       objEndless: '无尽模式 · 第 {0} 波 —— 活下去!',
       bannerEndless: '第 {0} 波',
       msgWaveClear: '☑ 本波肃清!+300 —— 下一波马上来袭……',
+      msgWaveBuff: '⚠ 第 {0} 波:猫军战力 ×{1} —— 数量、攻速、伤害全部翻倍!',
       msgDrop: '📦 补给空投正在降落!',
       msgDropGot: '📦 补给到手!火箭+5 追踪+1 HP+15',
       achUnlock: '🏅 成就解锁:{0}',
@@ -136,7 +138,7 @@
   var DIFF_TABLE = {
     easy: { dmg: 0.55, reload: 1.35, regen: 1.8 },
     normal: { dmg: 1, reload: 1, regen: 1 },
-    hard: { dmg: 1.45, reload: 0.78, regen: 0.7 }
+    hard: { dmg: 1.75, reload: 0.62, regen: 0.5 }
   };
   var difficulty = 'normal';
   try {
@@ -1690,6 +1692,8 @@
       headYaw: 0,
       fireTimer: 2 + Math.random() * 2,
       reload: opts.reload || 2.0,
+      dmgMul: opts.dmgMul || 1,
+      rateMul: opts.rateMul || 1,
       deployTime: opts.deploy || 8,
       deployCap: opts.cap !== undefined ? opts.cap : 3,
       deployTimer: isKing ? 6 : 4 + Math.random() * 4,
@@ -1768,20 +1772,24 @@
     var isGuard = !!opts.guard;
     if (!isGuard) {
       var catCount = soldiers.filter(function (s) { return s.kind === 'cat'; }).length;
-      if (catCount >= MAX_SOLDIERS) return;
+      var cap = endless ? Math.min(8 * Math.pow(2, wave - 1), 24) : MAX_SOLDIERS;
+      if (catCount >= cap) return;
     }
     var mesh = buildCatSoldier(isGuard);
     mesh.position.set(x, 0, z);
     scene.add(mesh);
     var bar = buildHpBar(0.9, isGuard ? 2.5 : 2.2);
     mesh.add(bar);
+    var mul = fromTank ? fromTank.dmgMul : (opts.dmgMul || 1);
+    var rate = fromTank ? fromTank.rateMul : (opts.rateMul || 1);
     soldiers.push({
       kind: isGuard ? 'catguard' : 'cat',
       mesh: mesh, bar: bar,
       pos: new THREE.Vector3(x, 0, z),
       hp: isGuard ? GUARD_HP : SOLDIER_HP,
       maxHp: isGuard ? GUARD_HP : SOLDIER_HP,
-      dmg: isGuard ? GUARD_DAMAGE : SOLDIER_DAMAGE,
+      dmg: Math.round((isGuard ? GUARD_DAMAGE : SOLDIER_DAMAGE) * mul),
+      atkCd: (isGuard ? 1.4 : 1.1) / rate,
       speed: isGuard ? GUARD_SPEED : SOLDIER_SPEED,
       attackTimer: 0,
       walkT: Math.random() * 10,
@@ -1803,13 +1811,18 @@
     currentObjectiveKey = null;
     objectiveEl.textContent = T('objEndless', wave);
     showBanner(T('bannerEndless', wave));
-    var count = Math.min(2 + wave, 6);
+    // every wave the horde DOUBLES: count, fire rate, and damage
+    var mul = Math.pow(2, wave - 1);
+    var count = Math.min(2 * mul, 8);
+    if (wave >= 2) showMessage(T('msgWaveBuff', wave, mul), 4);
     var spots = ALL_TANK_SPOTS.slice().sort(function () { return Math.random() - 0.5; }).slice(0, count);
     spots.forEach(function (s) {
       spawnTank(s[0], s[1], {
-        reload: Math.max(1.2, 2.4 - wave * 0.15),
-        deploy: Math.max(5, 9 - wave),
-        cap: 3
+        reload: Math.max(0.5, 2.4 / mul),
+        deploy: Math.max(2, 9 / mul),
+        cap: Math.min(3 * mul, 12),
+        dmgMul: mul,
+        rateMul: mul
       });
     });
     if (wave >= 5) unlockAch('achWave5');
@@ -1984,7 +1997,7 @@
     return g;
   }
 
-  function fireProjectile(origin, dir, friendly, seek) {
+  function fireProjectile(origin, dir, friendly, seek, dmgMul) {
     var mesh = buildRocketMesh(friendly, seek);
     mesh.position.copy(origin);
     mesh.lookAt(origin.clone().add(dir));
@@ -1998,6 +2011,7 @@
       vel: dir.clone().multiplyScalar(seek ? SEEKER_SPEED : (friendly ? ROCKET_SPEED : SHELL_SPEED)),
       friendly: friendly,
       seek: !!seek,
+      dmgMul: dmgMul || 1,
       life: seek ? 6 : 4,
       age: 0
     });
@@ -2139,7 +2153,8 @@
     }
   }
 
-  function explode(pos, friendly) {
+  function explode(pos, friendly, dmgMul) {
+    dmgMul = dmgMul || 1;
     fireworkExplosion(pos, !friendly);
     var baseY = baseGroundAt(pos.x, pos.z);
     if (pos.y < baseY + 2.2) addScorch(pos.x, pos.z, 1.6 + Math.random() * 1.0, baseY + 0.05);
@@ -2171,18 +2186,18 @@
     } else {
       var r = ROCKET_SPLASH + 1.5;
       d = Math.hypot(pos.x - player.pos.x, pos.z - player.pos.z);
-      if (d < r) hurtPlayer(Math.round(13 * (1 - d / r) + 4));   // per-shell damage lowered — tanks fire volleys now
+      if (d < r) hurtPlayer(Math.round((13 * (1 - d / r) + 4) * dmgMul));   // volley shells; endless waves multiply this
       for (k = allies.length - 1; k >= 0; k--) {
         d = Math.hypot(pos.x - allies[k].pos.x, pos.z - allies[k].pos.z);
-        if (d < r) damageAlly(allies[k], Math.round(16 * (1 - d / r) + 4));
+        if (d < r) damageAlly(allies[k], Math.round((16 * (1 - d / r) + 4) * dmgMul));
       }
       for (k = mouseGuards.length - 1; k >= 0; k--) {
         d = Math.hypot(pos.x - mouseGuards[k].pos.x, pos.z - mouseGuards[k].pos.z);
-        if (d < r) damageMouseGuard(mouseGuards[k], Math.round(16 * (1 - d / r) + 4));
+        if (d < r) damageMouseGuard(mouseGuards[k], Math.round((16 * (1 - d / r) + 4) * dmgMul));
       }
       if (mouseKing.alive) {
         d = Math.hypot(pos.x - mouseKing.pos.x, pos.z - mouseKing.pos.z);
-        if (d < r) damageMouseKing(Math.round(18 * (1 - d / r) + 4));
+        if (d < r) damageMouseKing(Math.round((18 * (1 - d / r) + 4) * dmgMul));
       }
     }
   }
@@ -2897,7 +2912,7 @@
 
       t.fireTimer -= dt;
       if (t.fireTimer <= 0 && Math.abs(diff) < 0.25) {
-        t.fireTimer = (t.isKing ? (t.enraged ? 1.0 : 1.6) : t.reload + Math.random() * 0.6) * DIFF().reload;
+        t.fireTimer = (t.isKing ? (t.enraged ? 1.0 : 1.6) : t.reload + Math.random() * 0.6) * DIFF().reload / t.rateMul;
         var muzzle = t.head.localToWorld(t.head.userData.muzzleLocal.clone());
         // tight aim, then a fanned volley of shells
         var aim = new THREE.Vector3(
@@ -2910,7 +2925,7 @@
         var spreadTotal = t.isKing ? (t.enraged ? 0.34 : 0.22) : 0.11;
         for (var si = 0; si < shots; si++) {
           var off = (si / (shots - 1) - 0.5) * spreadTotal + (Math.random() - 0.5) * 0.02;
-          fireProjectile(muzzle.clone(), aim.clone().applyAxisAngle(up, off), false);
+          fireProjectile(muzzle.clone(), aim.clone().applyAxisAngle(up, off), false, false, t.dmgMul);
         }
         sfx.shoot();
         for (var s = 0; s < 8; s++) {
@@ -3027,7 +3042,7 @@
       // can't claw what's a whole trench-height above you
       var dyOk = Math.abs((target.pos.y || 0) - s.pos.y) < 1.8;
       if (dist < SOLDIER_RANGE && dyOk && s.attackTimer <= 0) {
-        s.attackTimer = s.kind === 'catguard' ? 1.4 : 1.1;
+        s.attackTimer = s.atkCd;
         target.hit(s.dmg);
         if (s.kind === 'catguard') sfx.clang(); else sfx.meow();
         s.pos.x += (dx / dist) * 0.4;
@@ -3212,7 +3227,7 @@
       }
 
       if (boom) {
-        explode(pos.clone(), p.friendly);
+        explode(pos.clone(), p.friendly, p.dmgMul);
         scene.remove(p.mesh);
         projectiles.splice(k, 1);
       }
