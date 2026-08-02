@@ -1,0 +1,18 @@
+{
+  "name": "world-war-mouse",
+  "version": "1.0.0",
+  "description": "A 3D firework battle game: mouse soldier vs. the cat army. 世界大战鼠",
+  "private": true,
+  "scripts": {
+    "build:www": "rm -rf www && mkdir -p www/lib && cp index.html game.js sw.js manifest.webmanifest icon-*.png og-image.png www/ && cp lib/three.min.js www/lib/",
+    "cap:init": "npm run build:www && npx cap sync",
+    "cap:android": "npm run build:www && npx cap add android && npx cap sync android && npx cap open android",
+    "cap:ios": "npm run build:www && npx cap add ios && npx cap sync ios && npx cap open ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/ios": "^6.0.0"
+  }
+}

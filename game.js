@@ -48,7 +48,17 @@
       diffLabel: 'DIFFICULTY', diffEasy: 'EASY', diffNormal: 'NORMAL', diffHard: 'HARD',
       combo2: 'DOUBLE KILL! +100', combo3: 'TRIPLE KILL! +300', combo4: 'RAMPAGE!!! +500',
       critText: 'CRIT!', squashText: 'SQUASH!',
-      msgEnrage: '😾 The CAT KING is ENRAGED! His cannon burns hot!'
+      msgEnrage: '😾 The CAT KING is ENRAGED! His cannon burns hot!',
+      endlessBtn: 'ENDLESS MODE', endlessHint: 'How many waves can you survive?',
+      objEndless: 'ENDLESS · WAVE {0} — survive!',
+      bannerEndless: 'WAVE {0}',
+      msgWaveClear: '☑ Wave cleared! +300 — next wave incoming...',
+      msgDrop: '📦 Supply drop incoming!',
+      msgDropGot: '📦 Supplies! +5 rockets, +1 seeker, +15 HP',
+      achUnlock: '🏅 Achievement unlocked: {0}',
+      achTitle: 'ACHIEVEMENTS',
+      achWin: 'First Victory', achRankS: 'S-Rank Commander', achAttic: 'Attic VIP',
+      achStomp: 'Cat Stomper', achSharp: 'Sharpshooter', achWave5: 'Endless Survivor'
     },
     zh: {
       subtitle: '世 界 大 战 鼠',
@@ -92,7 +102,17 @@
       diffLabel: '难度', diffEasy: '简单', diffNormal: '普通', diffHard: '困难',
       combo2: '双杀!+100', combo3: '三连杀!+300', combo4: '超神了!!!+500',
       critText: '暴击!', squashText: '踩扁!',
-      msgEnrage: '😾 猫国王狂暴了!火炮全开!'
+      msgEnrage: '😾 猫国王狂暴了!火炮全开!',
+      endlessBtn: '无尽模式', endlessHint: '你能活过多少波?',
+      objEndless: '无尽模式 · 第 {0} 波 —— 活下去!',
+      bannerEndless: '第 {0} 波',
+      msgWaveClear: '☑ 本波肃清!+300 —— 下一波马上来袭……',
+      msgDrop: '📦 补给空投正在降落!',
+      msgDropGot: '📦 补给到手!火箭+5 追踪+1 HP+15',
+      achUnlock: '🏅 成就解锁:{0}',
+      achTitle: '成就',
+      achWin: '首胜将军', achRankS: 'S级指挥官', achAttic: '阁楼贵宾',
+      achStomp: '猫猫踩踏机', achSharp: '神射手', achWave5: '无尽生存者'
     }
   };
   var LANG = (function () {
@@ -122,6 +142,39 @@
     if (DIFF_TABLE[savedDiff]) difficulty = savedDiff;
   } catch (e) { }
   function DIFF() { return DIFF_TABLE[difficulty]; }
+
+  // ---------- achievements ----------
+  var ACH_KEYS = ['achWin', 'achRankS', 'achAttic', 'achStomp', 'achSharp', 'achWave5'];
+  var ACH_ICONS = { achWin: '🏆', achRankS: '⭐', achAttic: '🐭', achStomp: '🐾', achSharp: '🎯', achWave5: '🌊' };
+  var achievements = {};
+  try { achievements = JSON.parse(localStorage.getItem('wwm-ach') || '{}'); } catch (e) { }
+  function unlockAch(key) {
+    if (achievements[key]) return;
+    achievements[key] = 1;
+    try { localStorage.setItem('wwm-ach', JSON.stringify(achievements)); } catch (e) { }
+    showMessage(T('achUnlock', T(key)), 4);
+    sfx.fanfare();
+    renderBadges();
+  }
+  function renderBadges() {
+    var row = document.getElementById('badges-row');
+    if (!row) return;
+    var html = '';
+    for (var k = 0; k < ACH_KEYS.length; k++) {
+      var key = ACH_KEYS[k];
+      var got = !!achievements[key];
+      html += '<span class="badge' + (got ? ' got' : '') + '" title="' + T(key) + '">' +
+        ACH_ICONS[key] + '<small>' + T(key) + '</small></span>';
+    }
+    row.innerHTML = html;
+  }
+  var stompCount = 0;
+  try { stompCount = parseInt(localStorage.getItem('wwm-stomps') || '0', 10) || 0; } catch (e) { }
+  function registerStomp() {
+    stompCount++;
+    try { localStorage.setItem('wwm-stomps', String(stompCount)); } catch (e) { }
+    if (stompCount >= 10) unlockAch('achStomp');
+  }
 
   // ---------- constants ----------
   var MAP_X = 65;
@@ -1369,6 +1422,59 @@
   addPickup(HOUSE_X + 8, HOUSE_Z - 4, 'popcorn', 25, 40);
   addPickup(HOUSE_X, HOUSE_Z + 6, 'popcorn', 25, 40);
 
+  // ---------- supply drops (parachuted crates) ----------
+  var drops = [];
+  var dropTimer = 50;
+  function spawnDrop() {
+    var g = new THREE.Group();
+    var crate = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.9, 1.3), woodMat);
+    crate.castShadow = true;
+    g.add(crate);
+    var band = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.22, 1.36),
+      new THREE.MeshLambertMaterial({ color: 0xc23040 }));
+    g.add(band);
+    var chute = new THREE.Group();
+    var canopy = new THREE.Mesh(
+      new THREE.ConeGeometry(2.1, 1.3, 10, 1, true),
+      new THREE.MeshLambertMaterial({ color: 0xe85555, side: THREE.DoubleSide })
+    );
+    canopy.position.y = 3.6;
+    chute.add(canopy);
+    for (var L = 0; L < 4; L++) {
+      var a = (L / 4) * Math.PI * 2 + Math.PI / 4;
+      var line = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 2.6, 4),
+        new THREE.MeshLambertMaterial({ color: 0xdddddd }));
+      line.position.set(Math.cos(a) * 0.9, 1.9, Math.sin(a) * 0.9);
+      line.rotation.z = Math.cos(a) * 0.5;
+      line.rotation.x = -Math.sin(a) * 0.5;
+      chute.add(line);
+    }
+    g.add(chute);
+    g.userData.chute = chute;
+    var x = Math.max(-MAP_X + 5, Math.min(MAP_X - 5, player.pos.x + (Math.random() - 0.5) * 36));
+    var z = Math.max(MAP_Z_MIN + 8, Math.min(MAP_Z_MAX - 8, player.pos.z + (Math.random() - 0.5) * 36));
+    g.position.set(x, 46, z);
+    scene.add(g);
+    drops.push({ mesh: g, x: x, t: Math.random() * 6 });
+  }
+  function updateDrops(dt) {
+    for (var k = drops.length - 1; k >= 0; k--) {
+      var d = drops[k];
+      d.t += dt;
+      d.mesh.position.y -= 5.5 * dt;
+      d.mesh.position.x = d.x + Math.sin(d.t * 1.8) * 0.7;
+      d.mesh.rotation.z = Math.sin(d.t * 1.8) * 0.08;
+      if (d.mesh.position.y <= 0.5) {
+        d.mesh.position.y = 0.5;
+        d.mesh.rotation.z = 0;
+        d.mesh.remove(d.mesh.userData.chute);
+        sparkBurst(d.mesh.position.clone(), 14, 0.1, 4, 0.4, 0.35);
+        pickups.push({ mesh: d.mesh, x: d.mesh.position.x, z: d.mesh.position.z, t: 0, type: 'drop', amount: 0, respawn: 0, timer: 0 });
+        drops.splice(k, 1);
+      }
+    }
+  }
+
   // ---------- cat enemies ----------
   function buildCatHead(scale) {
     var head = new THREE.Group();
@@ -1566,6 +1672,36 @@
   // ---------- level progression ----------
   var level = 0;
   var levelTransition = 0;
+  var endless = false, wave = 0;
+  function nextWave() {
+    wave++;
+    currentObjectiveKey = null;
+    objectiveEl.textContent = T('objEndless', wave);
+    showBanner(T('bannerEndless', wave));
+    var count = Math.min(2 + wave, 6);
+    var spots = ALL_TANK_SPOTS.slice().sort(function () { return Math.random() - 0.5; }).slice(0, count);
+    spots.forEach(function (s) {
+      spawnTank(s[0], s[1], {
+        reload: Math.max(1.2, 2.4 - wave * 0.15),
+        deploy: Math.max(5, 9 - wave),
+        cap: 3
+      });
+    });
+    if (wave >= 5) unlockAch('achWave5');
+    sfx.horn();
+  }
+  function startEndless() {
+    endless = true;
+    state = 'playing';
+    hideAll();
+    requestLock();
+    startMusic();
+    if (IS_TOUCH) touchUi.classList.remove('hidden');
+    player.hp = PLAYER_MAX_HP;
+    player.ammo += 8;
+    nextWave();
+    updateHud();
+  }
   var ALL_TANK_SPOTS = [[-24, 44], [22, 8], [34, 26], [-38, 2], [-14, -34], [20, -62], [-10, -70], [14, -78]];
   var objectiveEl = document.getElementById('objective');
   var currentObjectiveKey = null;
@@ -1792,7 +1928,15 @@
       if (t.isKing) winGame();
       else {
         var left = tanks.filter(function (x) { return x.alive && !x.isKing; }).length;
-        if (left > 0) {
+        if (endless) {
+          if (left === 0) {
+            showMessage(T('msgWaveClear'), 4);
+            addScore(300);
+            levelTransition = 5;
+          } else {
+            showMessage(T('msgTankDown', left), 3);
+          }
+        } else if (left > 0) {
           showMessage(T('msgTankDown', left), 3);
         } else if (level === 1) {
           showMessage(T('msgSkirmishWon'), 5);
@@ -2220,6 +2364,7 @@
   document.getElementById('retry-btn').addEventListener('click', function () { location.reload(); });
   document.getElementById('again-btn').addEventListener('click', function () { location.reload(); });
   document.getElementById('pause-restart-btn').addEventListener('click', function () { location.reload(); });
+  document.getElementById('endless-btn').addEventListener('click', function () { startEndless(); });
   var pauseBtn = document.getElementById('pause-btn');
   pauseBtn.addEventListener('touchend', function (e) {
     e.preventDefault(); e.stopPropagation();
@@ -2268,6 +2413,9 @@
     var html = statsRows(total);
     if (saveBest(total, rank)) html += '<div style="color:#ffd23f">🏆 ' + T('stBest') + '</div>';
     document.getElementById('victory-stats').innerHTML = html;
+    unlockAch('achWin');
+    if (rank === 'S') unlockAch('achRankS');
+    if (stats.shots > 0 && stats.hits / stats.shots >= 0.6) unlockAch('achSharp');
     show('victory-screen');
   }
   function loseGame(reason) {
@@ -2421,7 +2569,9 @@
           var dxs = player.pos.x - so.pos.x, dzs = player.pos.z - so.pos.z;
           if (dxs * dxs + dzs * dzs < 1.2 && player.pos.y > 0.7 && player.pos.y < 2.1) {
             spawnFloatText(T('squashText') + ' 🐾', so.pos.clone().setY(2.4), '#aef29a');
+            var wasCat = so.kind === 'cat';
             damageSoldierObj(so, so.kind === 'catguard' ? 45 : 9999);
+            if (wasCat) registerStomp();
             if (so.kind === 'catguard') sfx.clang();
             player.velY = 7.5;
             sfx.squash();
@@ -2470,6 +2620,7 @@
       atticDone = true;
       player.seekers += 3;
       addScore(200);
+      unlockAch('achAttic');
       sfx.fanfare();
       showMessage(T('msgAttic'), 5);
     }
@@ -2528,7 +2679,7 @@
         continue;
       }
       p.t += dt;
-      p.mesh.position.y = 0.15 + Math.sin(p.t * 2.5) * 0.12;
+      p.mesh.position.y = (p.type === 'drop' ? 0.5 : 0.15) + Math.sin(p.t * 2.5) * 0.12;
       if (p.type !== 'popcorn') {
         p.mesh.rotation.y += dt * 1.5;
         // idle sparkle fountain so pickups glitter from afar
@@ -2545,6 +2696,12 @@
           player.hp = Math.min(PLAYER_MAX_HP, player.hp + p.amount);
           sfx.munch();
           showMessage(T('msgPopcorn', p.amount), 2);
+        } else if (p.type === 'drop') {
+          player.ammo += 5;
+          player.seekers += 1;
+          player.hp = Math.min(PLAYER_MAX_HP, player.hp + 15);
+          sfx.pickup();
+          showMessage(T('msgDropGot'), 2.5);
         } else if (p.type === 'seeker' || p.type === 'seekerbox') {
           player.seekers += p.amount;
           sfx.pickup();
@@ -3013,8 +3170,18 @@
       }
       if (levelTransition > 0) {
         levelTransition -= dt;
-        if (levelTransition <= 0) startLevel(level + 1);
+        if (levelTransition <= 0) {
+          if (endless) nextWave();
+          else startLevel(level + 1);
+        }
       }
+      dropTimer -= dt;
+      if (dropTimer <= 0) {
+        dropTimer = 42 + Math.random() * 16;
+        spawnDrop();
+        showMessage(T('msgDrop'), 3);
+      }
+      updateDrops(dt);
       updateWrath();
       updatePlayer(dt);
       updatePickups(dt);
@@ -3079,6 +3246,7 @@
     if (currentObjectiveKey) objectiveEl.textContent = T(currentObjectiveKey);
     document.documentElement.lang = LANG;
     updateBestLine();
+    renderBadges();
   }
   document.getElementById('lang-btn').addEventListener('click', function () {
     LANG = LANG === 'zh' ? 'en' : 'zh';

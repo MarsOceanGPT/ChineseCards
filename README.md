@@ -1,4 +1,10 @@
-# World War Mouse 🐭🎆
+# World War Mouse 🐭🎆 世界大战鼠
+
+**▶ Play now / 立即游玩: https://marsoceangpt.github.io/ChineseCards/**
+
+Installable as an app on iPhone & Android (PWA — fullscreen, offline,
+home-screen icon). See [APP_STORES.md](APP_STORES.md) for install and
+store-publishing paths.
 
 A 3D browser game. You are a mouse soldier fighting the invading cat army:
 cat-shaped tanks with firework cannons in their mouths that deploy walking
@@ -49,6 +55,12 @@ fire at it, plus on-screen fire and jump buttons.
   castle with his imperial guard and an escort column.
 - **Win** by destroying the Cat King (the big crowned tank) in level 3.
   Lose if your HP hits zero — or the Mouse King's does.
+- **After victory, Endless Mode** — survive escalating waves of cat armor
+  for as long as you can. Supply drops parachute in to keep you stocked.
+- **Achievements & records** — six badges to earn (stomp 10 cats, reach
+  wave 5, win with 60% accuracy...), plus a persistent best score and
+  S/A/B/C battle ranks. Bilingual (中文/English), difficulty settings,
+  and chiptune music included.
 
 ## Tech
 
