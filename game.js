@@ -58,7 +58,8 @@
       achUnlock: '🏅 Achievement unlocked: {0}',
       achTitle: 'ACHIEVEMENTS',
       achWin: 'First Victory', achRankS: 'S-Rank Commander', achAttic: 'Attic VIP',
-      achStomp: 'Cat Stomper', achSharp: 'Sharpshooter', achWave5: 'Endless Survivor'
+      achStomp: 'Cat Stomper', achSharp: 'Sharpshooter', achWave5: 'Endless Survivor',
+      msgTrap: '⚠ You fell into the cat army\'s trap trench! Find the hidden ladder!'
     },
     zh: {
       subtitle: '世 界 大 战 鼠',
@@ -112,7 +113,8 @@
       achUnlock: '🏅 成就解锁:{0}',
       achTitle: '成就',
       achWin: '首胜将军', achRankS: 'S级指挥官', achAttic: '阁楼贵宾',
-      achStomp: '猫猫踩踏机', achSharp: '神射手', achWave5: '无尽生存者'
+      achStomp: '猫猫踩踏机', achSharp: '神射手', achWave5: '无尽生存者',
+      msgTrap: '⚠ 掉进了猫军的陷阱壕沟!快找到那把隐藏的梯子!'
     }
   };
   var LANG = (function () {
@@ -194,8 +196,30 @@
   var ALLY_HP = 40;
   var MAX_SOLDIERS = 9;
   var HOUSE_X = 0, HOUSE_Z = 106;
-  var LADDER = { x: 13.0, z: 100, top: 6.15 };   // climbs the house's right-front corner
   var CASTLE_Z = -95;
+
+  // trenches: the mouse trench is shallow with plenty of ladders (defense);
+  // the cat trench is deep with one bridge and a single hidden ladder (a trap)
+  var MOUSE_TRENCH_D = 2.2, CAT_TRENCH_D = 3.4;
+  var TRENCH_RECTS = [
+    // mouse trench ring (front-west, front-east with an earth causeway on the path, left, right)
+    { x: -12.1, z: 93.5, hx: 8.05, hz: 1.5, d: MOUSE_TRENCH_D },
+    { x: 12.1, z: 93.5, hx: 8.05, hz: 1.5, d: MOUSE_TRENCH_D },
+    { x: -21.6, z: 105, hx: 1.6, hz: 13, d: MOUSE_TRENCH_D },
+    { x: 21.6, z: 105, hx: 1.6, hz: 13, d: MOUSE_TRENCH_D },
+    // cat trench ring (front with a wooden bridge over it, left, right)
+    { x: 0, z: -68, hx: 32, hz: 2, d: CAT_TRENCH_D },
+    { x: -34, z: -92, hx: 2, hz: 26, d: CAT_TRENCH_D },
+    { x: 34, z: -92, hx: 2, hz: 26, d: CAT_TRENCH_D }
+  ];
+  // climbable ladders: {x, z, base, top, ex/ez = exit nudge at the top}
+  var LADDERS = [
+    { x: 13.2, z: 100, top: 6.15, base: 0, ex: 0.5, ez: 0 },        // house roof (attic)
+    { x: 8, z: 93.5, top: 0, base: -MOUSE_TRENCH_D, ex: 0, ez: 2.2 },   // mouse trench front
+    { x: -21.6, z: 100, top: 0, base: -MOUSE_TRENCH_D, ex: 2.4, ez: 0 },// mouse trench left
+    { x: 21.6, z: 100, top: 0, base: -MOUSE_TRENCH_D, ex: -2.4, ez: 0 },// mouse trench right
+    { x: -20, z: -68, top: 0, base: -CAT_TRENCH_D, ex: 0, ez: 2.6 }     // cat trench: the ONE way out
+  ];
 
   // ---------- deterministic rng for level layout ----------
   function mulberry32(seed) {
@@ -262,23 +286,40 @@
   grassTex.repeat.set(26, 40);
   grassTex.colorSpace = THREE.SRGBColorSpace;
 
-  var ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(2 * MAP_X + 60, MAP_Z_MAX - MAP_Z_MIN + 80),
-    new THREE.MeshLambertMaterial({ map: grassTex })
-  );
+  // the ground is a shape with holes cut where the trenches are dug
+  grassTex.repeat.set(0.14, 0.14);
+  var gShape = new THREE.Shape();
+  var GX = MAP_X + 30, GZ0 = MAP_Z_MIN - 40, GZ1 = MAP_Z_MAX + 40;
+  gShape.moveTo(-GX, -GZ1);
+  gShape.lineTo(GX, -GZ1);
+  gShape.lineTo(GX, -GZ0);
+  gShape.lineTo(-GX, -GZ0);
+  gShape.closePath();
+  TRENCH_RECTS.forEach(function (r) {
+    var h = new THREE.Path();
+    h.moveTo(r.x - r.hx, -(r.z - r.hz));
+    h.lineTo(r.x + r.hx, -(r.z - r.hz));
+    h.lineTo(r.x + r.hx, -(r.z + r.hz));
+    h.lineTo(r.x - r.hx, -(r.z + r.hz));
+    h.closePath();
+    gShape.holes.push(h);
+  });
+  var ground = new THREE.Mesh(new THREE.ShapeGeometry(gShape), new THREE.MeshLambertMaterial({ map: grassTex }));
   ground.rotation.x = -Math.PI / 2;
-  ground.position.z = (MAP_Z_MIN + MAP_Z_MAX) / 2;
   ground.receiveShadow = true;
   scene.add(ground);
 
-  var path = new THREE.Mesh(
-    new THREE.PlaneGeometry(8, MAP_Z_MAX - MAP_Z_MIN),
-    new THREE.MeshLambertMaterial({ color: 0x8a6f45 })
-  );
-  path.rotation.x = -Math.PI / 2;
-  path.position.set(0, 0.02, (MAP_Z_MIN + MAP_Z_MAX) / 2);
-  path.receiveShadow = true;
-  scene.add(path);
+  var pathMat = new THREE.MeshLambertMaterial({ color: 0x8a6f45 });
+  var pathA = new THREE.Mesh(new THREE.PlaneGeometry(8, MAP_Z_MAX - (-64)), pathMat);
+  pathA.rotation.x = -Math.PI / 2;
+  pathA.position.set(0, 0.02, (MAP_Z_MAX + (-64)) / 2);
+  pathA.receiveShadow = true;
+  scene.add(pathA);
+  var pathB = new THREE.Mesh(new THREE.PlaneGeometry(8, 44), pathMat);
+  pathB.rotation.x = -Math.PI / 2;
+  pathB.position.set(0, 0.02, -93);
+  pathB.receiveShadow = true;
+  scene.add(pathB);
 
   // drifting clouds
   var clouds = [];
@@ -336,6 +377,7 @@
       if (Math.abs(x) < 4.8) return false;                        // keep the dirt path clean
       if (z > 92 && Math.abs(x) < 17) return false;               // house area
       if (z < CASTLE_Z + 22 && Math.abs(x) < 28) return false;    // castle courtyard
+      if (baseGroundAt(x, z) < 0) return false;                   // never inside a trench
       return true;
     }
     var bladeCanvas = document.createElement('canvas');
@@ -447,6 +489,31 @@
   // ---------- colliders ----------
   var obstacles = []; // ground-up columns {x, z, hx, hz, h}
   var platforms = []; // elevated walkable slabs {x, z, hx, hz, y}
+  var pits = [];      // sunken regions {x, z, hx, hz, depth}
+
+  function baseGroundAt(x, z) {
+    for (var k = 0; k < TRENCH_RECTS.length; k++) {
+      var p = TRENCH_RECTS[k];
+      if (Math.abs(x - p.x) < p.hx && Math.abs(z - p.z) < p.hz) return -p.d;
+    }
+    return 0;
+  }
+
+  // move with collision AND cliff rules — you cannot walk up a ledge taller than a step
+  function tryMove(pos, dx, dz, radius) {
+    var ox = pos.x, oz = pos.z;
+    pos.x += dx; pos.z += dz;
+    collideCircle(pos, radius);
+    if (baseGroundAt(pos.x, pos.z) > pos.y + 0.55) {
+      pos.x = ox; pos.z = oz;
+      pos.x += dx;
+      collideCircle(pos, radius);
+      if (baseGroundAt(pos.x, pos.z) > pos.y + 0.55) pos.x = ox;
+      pos.z += dz;
+      collideCircle(pos, radius);
+      if (baseGroundAt(pos.x, pos.z) > pos.y + 0.55) pos.z = oz;
+    }
+  }
 
   function addObstacleCollider(x, z, hx, hz, h) {
     var o = { x: x, z: z, hx: hx, hz: hz, h: h || 2.5 };
@@ -476,7 +543,7 @@
   }
 
   function groundHeightAt(x, z, radius, feet) {
-    var g = 0;
+    var g = baseGroundAt(x, z);
     var k, o;
     for (k = 0; k < obstacles.length; k++) {
       o = obstacles[k];
@@ -691,6 +758,64 @@
       scene.add(lm);
       atticLeaders.push(lm);
     }
+  })();
+
+  // ---------- trenches ----------
+  (function buildTrenches() {
+    var dirtMat = new THREE.MeshLambertMaterial({ color: 0x5d452c });
+    var dirtDarkMat = new THREE.MeshLambertMaterial({ color: 0x44331f });
+    TRENCH_RECTS.forEach(function (r) {
+      var floor = new THREE.Mesh(new THREE.PlaneGeometry(r.hx * 2, r.hz * 2), dirtDarkMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(r.x, -r.d + 0.02, r.z);
+      floor.receiveShadow = true;
+      scene.add(floor);
+      var wallH = r.d + 0.12;
+      var wallY = (-r.d + 0.12) / 2 + 0.0;
+      [[r.x, r.z - r.hz, r.hx * 2 + 0.4, 0.4], [r.x, r.z + r.hz, r.hx * 2 + 0.4, 0.4],
+       [r.x - r.hx, r.z, 0.4, r.hz * 2 + 0.4], [r.x + r.hx, r.z, 0.4, r.hz * 2 + 0.4]].forEach(function (w) {
+        var wall = new THREE.Mesh(new THREE.BoxGeometry(w[2], wallH, w[3]), dirtMat);
+        wall.position.set(w[0], wallY, w[1]);
+        wall.receiveShadow = true;
+        scene.add(wall);
+      });
+    });
+    // spikes at the bottom of the cat trap trench
+    var spikeMat = new THREE.MeshLambertMaterial({ color: 0x4c4f55 });
+    for (var sp = 0; sp < 22; sp++) {
+      var spike = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.0 + Math.random() * 0.5, 5), spikeMat);
+      spike.position.set((Math.random() - 0.5) * 58, -CAT_TRENCH_D + 0.55, -68 + (Math.random() - 0.5) * 3);
+      spike.castShadow = true;
+      scene.add(spike);
+    }
+    // the small wooden bridge across the cat trench
+    var plank = new THREE.Mesh(new THREE.BoxGeometry(5, 0.25, 6.8), woodMat);
+    plank.position.set(0, 0.06, -68);
+    plank.castShadow = true; plank.receiveShadow = true;
+    scene.add(plank);
+    [-2.45, 2.45].forEach(function (rx) {
+      var rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.85, 6.8), woodDarkMat);
+      rail.position.set(rx, 0.6, -68);
+      rail.castShadow = true;
+      scene.add(rail);
+    });
+    platforms.push({ x: 0, z: -68, hx: 2.5, hz: 3.4, y: 0.19 });
+    // ladder visuals (trench ladders; the roof ladder is built with the house)
+    var railMat = new THREE.MeshLambertMaterial({ color: 0x8a6234 });
+    LADDERS.forEach(function (l) {
+      if (l.top > 1) return; // roof ladder already has a mesh
+      var h = l.top - l.base + 0.5;
+      [-0.5, 0.5].forEach(function (o) {
+        var rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, h, 0.1), railMat);
+        rail.position.set(l.x, l.base + h / 2, l.z + o);
+        scene.add(rail);
+      });
+      for (var rg = 0; rg < Math.floor(h / 0.5); rg++) {
+        var rung = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.0), railMat);
+        rung.position.set(l.x, l.base + 0.3 + rg * 0.5, l.z);
+        scene.add(rung);
+      }
+    });
   })();
 
   // ---------- mouse builder (player / king / allies / guards / leaders) ----------
@@ -1328,7 +1453,7 @@
   });
 
   var allies = [];
-  [[-3.5, 96], [3.5, 96], [0, 92]].forEach(function (s) {
+  [[-3.5, 96.5], [3.5, 96.5], [0, 91]].forEach(function (s) {
     var m = buildMouse({ color: 0x9a7b5a, helmet: true, launcher: true });
     scene.add(m);
     var bar = buildHpBar(1.0, 2.3, 0x4a86d8);
@@ -1345,7 +1470,7 @@
   var pickups = []; // {mesh,x,z,t,type,amount,respawn,timer(active when >0 hidden)}
   var PICKUP_SPOTS = [
     [1.2, 88], [-18, 70], [24, 58], [-34, 38], [14, 24],
-    [-8, 2], [30, -18], [-28, -38], [6, -56], [-14, -70], [34, -62], [0, CASTLE_Z + 12]
+    [-8, 2], [30, -18], [-28, -38], [6, -56], [-14, -58], [28, -63], [0, CASTLE_Z + 12]
   ];
   var SEEKER_SPOTS = [[-24, 52], [18, -8], [-6, -48]];
 
@@ -1702,7 +1827,7 @@
     nextWave();
     updateHud();
   }
-  var ALL_TANK_SPOTS = [[-24, 44], [22, 8], [34, 26], [-38, 2], [-14, -34], [20, -62], [-10, -70], [14, -78]];
+  var ALL_TANK_SPOTS = [[-24, 44], [22, 8], [34, 26], [-38, 2], [-14, -34], [20, -62], [-12, -56], [14, -58]];
   var objectiveEl = document.getElementById('objective');
   var currentObjectiveKey = null;
   function setObjective(key) { currentObjectiveKey = key; objectiveEl.textContent = T(key); }
@@ -1797,8 +1922,8 @@
       spawnSoldier(5.5, CASTLE_Z - 2, null, { guard: true });
       spawnSoldier(-4, CASTLE_Z + 24, null);
       spawnSoldier(4, CASTLE_Z + 24, null);
-      spawnTank(-10, -70, { reload: 2.0, deploy: 7, cap: 3 });
-      spawnTank(14, -78, { reload: 2.0, deploy: 7, cap: 3 });
+      spawnTank(-12, -56, { reload: 2.0, deploy: 7, cap: 3 });
+      spawnTank(14, -58, { reload: 2.0, deploy: 7, cap: 3 });
       raidTimer = 35;
       player.hp = Math.min(PLAYER_MAX_HP, player.hp + 40);
       sfx.horn();
@@ -1825,6 +1950,7 @@
     if (z < CASTLE_Z + 22 && Math.abs(x) < 28) return false;
     if (z > HOUSE_Z - 14 && Math.abs(x) < 20) return false;   // keep the house area clear
     if (Math.abs(x) < 5) return false;                        // keep the main path clear
+    if (baseGroundAt(x, z) < 0) return false;                 // never inside a trench
     return true;
   }
   for (var n = 0; n < 46; n++) {
@@ -2015,7 +2141,8 @@
 
   function explode(pos, friendly) {
     fireworkExplosion(pos, !friendly);
-    if (pos.y < 2.2) addScorch(pos.x, pos.z, 1.6 + Math.random() * 1.0);
+    var baseY = baseGroundAt(pos.x, pos.z);
+    if (pos.y < baseY + 2.2) addScorch(pos.x, pos.z, 1.6 + Math.random() * 1.0, baseY + 0.05);
     var hearDist = Math.hypot(pos.x - player.pos.x, pos.z - player.pos.z);
     sfx.explode(Math.max(0.12, 1 - hearDist / 80));
     shake = Math.min(shake + (friendly ? 0.15 : 0.3), 0.6);
@@ -2439,6 +2566,7 @@
   var stepSoundT = 0, climbSoundT = 0;
   var heartT = 0, orbitT = 0;
   var hitstop = 0, fovKick = 0, cineT = 0;
+  var trapWarned = false;
   var vignetteEl = document.getElementById('vignette');
 
   // per-level sky mood: clear noon -> golden sunset -> ominous blood dusk
@@ -2467,7 +2595,7 @@
 
   // scorch marks left by explosions
   var scorches = [], scorchIdx = 0, MAX_SCORCH = 12;
-  function addScorch(x, z, r) {
+  function addScorch(x, z, r, y) {
     var s;
     if (scorches.length < MAX_SCORCH) {
       var mesh = new THREE.Mesh(
@@ -2481,7 +2609,7 @@
     } else {
       s = scorches[scorchIdx++ % MAX_SCORCH];
     }
-    s.mesh.position.set(x, 0.045 + (scorchIdx % 6) * 0.002, z);
+    s.mesh.position.set(x, (y || 0.045) + (scorchIdx % 6) * 0.002, z);
     s.mesh.scale.setScalar(r);
     s.life = 9;
     s.mesh.visible = true;
@@ -2519,35 +2647,54 @@
     var tvx = len > 0 ? (mx / len) * speed : 0;
     var tvz = len > 0 ? (mz / len) * speed : 0;
 
-    // ladder to the attic: walk into it and hold any direction to climb;
+    // fell into the cat army's trap trench — warn once per fall
+    if (player.pos.y < -2.6) {
+      if (!trapWarned) { trapWarned = true; showMessage(T('msgTrap'), 4); sfx.meow(); }
+    } else if (player.pos.y > -1) {
+      trapWarned = false;
+    }
+
+    // ladders: walk into one and hold any direction to climb;
     // the mouse grips the rungs, so no sliding off — jump to let go
-    var onLadder = player.pos.y < LADDER.top - 0.05 &&
-      Math.abs(player.pos.x - LADDER.x) < 1.0 && Math.abs(player.pos.z - LADDER.z) < 1.1;
-    if (onLadder && (len > 0 || player.pos.y > 0.1) && !jumpQueued) {
+    var onLadder = null;
+    for (var li = 0; li < LADDERS.length; li++) {
+      var lad = LADDERS[li];
+      if (player.pos.y < lad.top - 0.05 && player.pos.y > lad.base - 0.6 &&
+          Math.abs(player.pos.x - lad.x) < 1.1 && Math.abs(player.pos.z - lad.z) < 1.2) {
+        onLadder = lad;
+        break;
+      }
+    }
+    if (onLadder && (len > 0 || player.pos.y > onLadder.base + 0.1) && !jumpQueued) {
       player.velY = 0;
       player.velX = 0; player.velZ = 0;
       var grip = Math.min(1, 10 * dt);
-      player.pos.x += (LADDER.x + 0.2 - player.pos.x) * grip;
-      player.pos.z += (LADDER.z - player.pos.z) * grip;
+      player.pos.x += (onLadder.x - player.pos.x) * grip;
+      player.pos.z += (onLadder.z - player.pos.z) * grip;
       if (len > 0) {
         player.pos.y += 3.4 * dt;
+        if (player.pos.y >= onLadder.top - 0.02) {
+          // topped out — step off onto solid ground
+          player.pos.y = onLadder.top + 0.02;
+          player.pos.x += onLadder.ex;
+          player.pos.z += onLadder.ez;
+        }
         climbSoundT -= dt;
         if (climbSoundT <= 0) { climbSoundT = 0.32; sfx.creak(); }
       }
       player.grounded = true;
     } else {
       if (onLadder && jumpQueued) {
-        // let go of the ladder with a little hop away from the wall
+        // let go of the ladder with a little hop away from it
         player.velY = 3.5;
-        player.velX = 6;
+        player.velX = (onLadder.ex || 1) * 5;
+        player.velZ = (onLadder.ez || 0) * 5;
         jumpQueued = false;
         sfx.jump();
       }
       player.velX += (tvx - player.velX) * ease;
       player.velZ += (tvz - player.velZ) * ease;
-      player.pos.x += player.velX * dt;
-      player.pos.z += player.velZ * dt;
-      collideCircle(player.pos, PLAYER_RADIUS);
+      tryMove(player.pos, player.velX * dt, player.velZ * dt, PLAYER_RADIUS);
 
       // vertical: gravity, jumping, landing on crates / the roof
       if (jumpQueued) {
@@ -2870,22 +3017,23 @@
       var dist = Math.hypot(dx, dz);
       s.mesh.rotation.y = Math.atan2(-dx, -dz);
       if (dist > SOLDIER_RANGE * 0.8) {
-        s.pos.x += (dx / dist) * s.speed * dt;
-        s.pos.z += (dz / dist) * s.speed * dt;
-        collideCircle(s.pos, 0.4);
+        tryMove(s.pos, (dx / dist) * s.speed * dt, (dz / dist) * s.speed * dt, 0.4);
         s.walkT += dt * (s.kind === 'catguard' ? 7 : 11);
         var swing = Math.sin(s.walkT) * 0.6;
         s.mesh.userData.legs[0].rotation.x = swing;
         s.mesh.userData.legs[1].rotation.x = -swing;
       }
       s.attackTimer -= dt;
-      if (dist < SOLDIER_RANGE && s.attackTimer <= 0) {
+      // can't claw what's a whole trench-height above you
+      var dyOk = Math.abs((target.pos.y || 0) - s.pos.y) < 1.8;
+      if (dist < SOLDIER_RANGE && dyOk && s.attackTimer <= 0) {
         s.attackTimer = s.kind === 'catguard' ? 1.4 : 1.1;
         target.hit(s.dmg);
         if (s.kind === 'catguard') sfx.clang(); else sfx.meow();
         s.pos.x += (dx / dist) * 0.4;
         s.pos.z += (dz / dist) * 0.4;
       }
+      s.pos.y = groundHeightAt(s.pos.x, s.pos.z, 0.4, s.pos.y);
       s.mesh.position.copy(s.pos);
     }
   }
@@ -2906,9 +3054,7 @@
         var dist = Math.hypot(dx, dz);
         g.mesh.rotation.y = Math.atan2(-dx, -dz);
         if (dist > 1.9) {
-          g.pos.x += (dx / dist) * (GUARD_SPEED + 0.4) * dt;
-          g.pos.z += (dz / dist) * (GUARD_SPEED + 0.4) * dt;
-          collideCircle(g.pos, 0.4);
+          tryMove(g.pos, (dx / dist) * (GUARD_SPEED + 0.4) * dt, (dz / dist) * (GUARD_SPEED + 0.4) * dt, 0.4);
           g.walkT += dt * 8;
         } else if (g.cool <= 0) {
           g.cool = 1.2;
@@ -2953,8 +3099,7 @@
             sfx.pickup();
           } else {
             var dx = best.x - a.pos.x, dz = best.z - a.pos.z;
-            a.pos.x += (dx / bestD) * 7 * dt;
-            a.pos.z += (dz / bestD) * 7 * dt;
+            tryMove(a.pos, (dx / bestD) * 7 * dt, (dz / bestD) * 7 * dt, 0.4);
             a.mesh.rotation.y = Math.atan2(-dx, -dz);
             moved = true;
           }
@@ -2994,19 +3139,16 @@
           var pdx = player.pos.x - a.pos.x, pdz = player.pos.z - a.pos.z;
           var pd = Math.hypot(pdx, pdz);
           if (pd > 9) {
-            a.pos.x += (pdx / pd) * 7 * dt;
-            a.pos.z += (pdz / pd) * 7 * dt;
+            tryMove(a.pos, (pdx / pd) * 7 * dt, (pdz / pd) * 7 * dt, 0.4);
             a.mesh.rotation.y = Math.atan2(-pdx, -pdz);
             moved = true;
           }
         }
       }
-      if (moved) {
-        collideCircle(a.pos, 0.4);
-        a.walkT += dt * 10;
-      }
+      if (moved) a.walkT += dt * 10;
+      a.pos.y = groundHeightAt(a.pos.x, a.pos.z, 0.4, a.pos.y);
       a.mesh.position.copy(a.pos);
-      a.mesh.position.y = moved ? Math.abs(Math.sin(a.walkT)) * 0.1 : 0;
+      a.mesh.position.y = a.pos.y + (moved ? Math.abs(Math.sin(a.walkT)) * 0.1 : 0);
     });
   }
 
@@ -3053,7 +3195,7 @@
       }
 
       var boom = false;
-      if (p.life <= 0 || pos.y <= 0.15) boom = true;
+      if (p.life <= 0 || pos.y <= baseGroundAt(pos.x, pos.z) + 0.15) boom = true;
       else if (p.age > 0.18 && pointHitsObstacle(pos.x, pos.z, 0.2, pos.y) && pos.y < 10) boom = true;
       else if (p.friendly) {
         for (var j = 0; j < tanks.length; j++) {
