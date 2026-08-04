@@ -64,7 +64,13 @@
       msgRevive: '👑 The Mouse King\'s blessing revives you! (once per battle, -500 pts)',
       msgRapid: '🔥 FIREWORK FRENZY! Triple fire rate for 12 seconds!',
       msgRelief: '🎁 Supply wave! The mouse quartermaster sends aid.',
-      eliteSwift: 'SWIFT CAT', eliteBoomer: 'BOOM CAT'
+      eliteSwift: 'SWIFT CAT', eliteBoomer: 'BOOM CAT',
+      msgCaught: '😾 A cat dragged you to PRISON! They forgot to take your fireworks — blast your way out and reunite with the mice!',
+      msgMortar: '⚠ MORTAR INCOMING — get out of the red circle!',
+      objEscape: 'CAPTURED — escape the cat prison and return to the Mouse King!',
+      msgReunion: '🐭 Reunited with the mice! Back to the war! (+150)',
+      bannerCaught: 'CAPTURED!',
+      achEscape: 'Jailbreaker'
     },
     zh: {
       subtitle: '世 界 大 战 鼠',
@@ -124,7 +130,13 @@
       msgRevive: '👑 鼠国王的祝福让你复活了!(每局一次,-500 分)',
       msgRapid: '🔥 烟花狂热!12 秒内射速×3!',
       msgRelief: '🎁 补给波!鼠军需官送来了援助。',
-      eliteSwift: '疾风猫', eliteBoomer: '自爆猫'
+      eliteSwift: '疾风猫', eliteBoomer: '自爆猫',
+      msgCaught: '😾 你被猫抓进了监狱!还好它们忘了搜走你的烟花——轰出一条路,回到鼠群身边!',
+      msgMortar: '⚠ 迫击炮来袭——快离开红圈!',
+      objEscape: '被俘 —— 逃出猫监狱,回到鼠国王身边!',
+      msgReunion: '🐭 与鼠群重聚!重返战场!(+150)',
+      bannerCaught: '被 俘!',
+      achEscape: '越狱专家'
     }
   };
   var LANG = (function () {
@@ -174,8 +186,8 @@
   }
 
   // ---------- achievements ----------
-  var ACH_KEYS = ['achWin', 'achRankS', 'achAttic', 'achStomp', 'achSharp', 'achWave5'];
-  var ACH_ICONS = { achWin: '🏆', achRankS: '⭐', achAttic: '🐭', achStomp: '🐾', achSharp: '🎯', achWave5: '🌊' };
+  var ACH_KEYS = ['achWin', 'achRankS', 'achAttic', 'achStomp', 'achSharp', 'achWave5', 'achEscape'];
+  var ACH_ICONS = { achWin: '🏆', achRankS: '⭐', achAttic: '🐭', achStomp: '🐾', achSharp: '🎯', achWave5: '🌊', achEscape: '🔓' };
   var achievements = {};
   try { achievements = JSON.parse(localStorage.getItem('wwm-ach') || '{}'); } catch (e) { }
   function unlockAch(key) {
@@ -786,6 +798,47 @@
       scene.add(lm);
       atticLeaders.push(lm);
     }
+  })();
+
+  // ---------- the cat prison (a grim gray cell out east) ----------
+  var PRISON_X = 48, PRISON_Z = -44;
+  (function buildPrison() {
+    var grayMatP = new THREE.MeshLambertMaterial({ color: 0x757a80 });
+    function pWall(x, z, w, d) {
+      var m = new THREE.Mesh(new THREE.BoxGeometry(w, 5, d), grayMatP);
+      m.position.set(x, 2.5, z);
+      m.castShadow = true; m.receiveShadow = true;
+      scene.add(m);
+      addObstacleCollider(x, z, w / 2, d / 2, 5);
+    }
+    pWall(PRISON_X, PRISON_Z - 5.5, 12, 1);              // north
+    pWall(PRISON_X, PRISON_Z + 5.5, 12, 1);              // south
+    pWall(PRISON_X + 5.5, PRISON_Z, 1, 12);              // east
+    pWall(PRISON_X - 5.5, PRISON_Z - 3.25, 1, 4.5);      // west (door gap in the middle)
+    pWall(PRISON_X - 5.5, PRISON_Z + 3.25, 1, 4.5);
+    // roof + grim floor + cell furnishings
+    var roof = new THREE.Mesh(new THREE.BoxGeometry(13, 0.4, 13), new THREE.MeshLambertMaterial({ color: 0x5c6167 }));
+    roof.position.set(PRISON_X, 5.2, PRISON_Z);
+    roof.castShadow = true; roof.receiveShadow = true;
+    scene.add(roof);
+    platforms.push({ x: PRISON_X, z: PRISON_Z, hx: 6.5, hz: 6.5, y: 5.4 });
+    var cellFloor = new THREE.Mesh(new THREE.PlaneGeometry(11, 11), new THREE.MeshLambertMaterial({ color: 0x62666c }));
+    cellFloor.rotation.x = -Math.PI / 2;
+    cellFloor.position.set(PRISON_X, 0.03, PRISON_Z);
+    scene.add(cellFloor);
+    var bunk = new THREE.Mesh(new THREE.BoxGeometry(3, 0.5, 1.4), new THREE.MeshLambertMaterial({ color: 0x4a4038 }));
+    bunk.position.set(PRISON_X + 3.5, 0.25, PRISON_Z - 3.5);
+    scene.add(bunk);
+    // barred window on the north wall
+    for (var b = 0; b < 4; b++) {
+      var bar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 6), new THREE.MeshLambertMaterial({ color: 0x2e3236 }));
+      bar.position.set(PRISON_X - 1.5 + b * 1, 3.2, PRISON_Z - 5.5 - 0.55);
+      scene.add(bar);
+    }
+    // one cold lamp so the cell isn't pitch black
+    var lamp = new THREE.PointLight(0xa8c0e0, 1.1, 18);
+    lamp.position.set(PRISON_X, 4.2, PRISON_Z);
+    scene.add(lamp);
   })();
 
   // ---------- trenches ----------
@@ -1717,6 +1770,8 @@
       maxHp: isKing ? KING_HP : TANK_HP,
       isKing: isKing,
       headYaw: 0,
+      bodyYaw: 0,
+      mortarT: 9 + Math.random() * 6,
       fireTimer: 2 + Math.random() * 2,
       reload: opts.reload || 2.0,
       dmgMul: opts.dmgMul || 1,
@@ -1819,7 +1874,7 @@
   function spawnSoldier(x, z, fromTank, opts) {
     opts = opts || {};
     var isGuard = !!opts.guard;
-    if (!isGuard) {
+    if (!isGuard && !opts.force) {
       var catCount = soldiers.filter(function (s) { return s.kind === 'cat'; }).length;
       var cap = endless ? Math.min(8 + wave * 3, 24) : MAX_SOLDIERS;
       if (catCount >= cap) return;
@@ -2024,6 +2079,7 @@
     if (z > HOUSE_Z - 14 && Math.abs(x) < 20) return false;   // keep the house area clear
     if (Math.abs(x) < 5) return false;                        // keep the main path clear
     if (baseGroundAt(x, z) < 0) return false;                 // never inside a trench
+    if (Math.hypot(x - 48, z + 44) < 12) return false;        // keep the prison yard clear
     return true;
   }
   for (var n = 0; n < 46; n++) {
@@ -2538,6 +2594,11 @@
     shake = Math.min(shake + 0.25, 0.6);
     updateHud();
     if (player.hp <= 0) {
+      // clawed down by a cat (not blown up) → dragged to the prison instead
+      if (lastHitWasMelee && !imprisoned) {
+        capturePlayer();
+        return;
+      }
       if (!reviveUsed) {
         // the Mouse King's blessing: one second chance per battle
         reviveUsed = true;
@@ -2865,6 +2926,21 @@
       player.hp = Math.min(PLAYER_MAX_HP, player.hp + 2.5 * DIFF().regen * dt);
     }
 
+    // escaped the prison and made it home — reunion!
+    if (imprisoned) {
+      var nearKing = mouseKing.alive &&
+        Math.hypot(player.pos.x - mouseKing.pos.x, player.pos.z - mouseKing.pos.z) < 18;
+      var atHouse = Math.abs(player.pos.x) < 20 && player.pos.z > 92;
+      if (nearKing || atHouse) {
+        imprisoned = false;
+        addScore(150);
+        unlockAch('achEscape');
+        showMessage(T('msgReunion'), 4);
+        sfx.fanfare();
+        restoreObjective();
+      }
+    }
+
     // attic conference easter egg
     if (!atticDone && player.pos.y > 5.5 &&
         Math.abs(player.pos.x - HOUSE_X) < 5 && Math.abs(player.pos.z - HOUSE_Z) < 4) {
@@ -2998,12 +3074,53 @@
       var dist = Math.hypot(dx, dz);
       if (dist > (wrath ? 78 : t.range)) return;
 
+      // tanks ADVANCE: once they spot you, they rumble toward you
+      if (!t.isKing && dist > 20) {
+        var spd = 2.6;
+        var nx = t.x + (dx / dist) * spd * dt;
+        var nz = t.z + (dz / dist) * spd * dt;
+        var okMove = baseGroundAt(nx, nz) === 0 &&
+          Math.abs(nx) < MAP_X - 3 && nz > MAP_Z_MIN + 4 && nz < MAP_Z_MAX - 4;
+        if (okMove) {
+          for (var oi = 0; oi < obstacles.length; oi++) {
+            var ob = obstacles[oi];
+            if (ob === t.collider) continue;
+            if (Math.abs(nx - ob.x) < ob.hx + 2.2 && Math.abs(nz - ob.z) < ob.hz + 2.2) { okMove = false; break; }
+          }
+        }
+        if (okMove) {
+          t.x = nx; t.z = nz;
+          t.collider.x = nx; t.collider.z = nz;
+          t.mesh.position.set(nx, 0, nz);
+          var wantBody = Math.atan2(-dx, -dz);
+          var bd = wantBody - t.bodyYaw;
+          while (bd > Math.PI) bd -= Math.PI * 2;
+          while (bd < -Math.PI) bd += Math.PI * 2;
+          t.bodyYaw += Math.max(-1.2 * dt, Math.min(1.2 * dt, bd));
+          t.mesh.rotation.y = t.bodyYaw;
+          // track dust
+          if (Math.random() < dt * 6) {
+            tmpColor.setHSL(0.1, 0.3, 0.25);
+            spawnParticle(new THREE.Vector3(t.x + (Math.random() - 0.5) * 3, 0.4, t.z + (Math.random() - 0.5) * 3),
+              new THREE.Vector3((Math.random() - 0.5), 0.8, (Math.random() - 0.5)),
+              tmpColor.clone(), 1.0, { gravity: -0.3, drag: 1.5, size: 0.9, endSize: 2.0, fade: 1.5 });
+          }
+        }
+      }
+
       var targetYaw = Math.atan2(-dx, -dz);
       var diff = targetYaw - t.headYaw;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
       t.headYaw += Math.max(-1.8 * dt, Math.min(1.8 * dt, diff));
-      t.head.rotation.y = t.headYaw;
+      t.head.rotation.y = t.headYaw - t.bodyYaw;
+
+      // mortar lob with a telegraphed danger circle — camping is not a strategy
+      t.mortarT -= dt;
+      if (t.mortarT <= 0) {
+        t.mortarT = (10 + Math.random() * 5) * DIFF().reload / t.rateMul / dda;
+        launchMortar(t);
+      }
 
       t.fireTimer -= dt;
       if (t.fireTimer <= 0 && Math.abs(diff) < 0.25) {
@@ -3058,6 +3175,37 @@
     }
   }
 
+  // ---------- capture & prison escape ----------
+  var imprisoned = false;
+  var lastHitWasMelee = false;
+  function capturePlayer() {
+    imprisoned = true;
+    player.hp = 55;
+    player.pos.set(PRISON_X, 0, PRISON_Z);
+    player.velX = 0; player.velZ = 0; player.velY = 0;
+    if (player.ammo + player.seekers < 6) player.ammo += 6;   // they "forgot" your fireworks
+    currentObjectiveKey = 'objEscape';
+    objectiveEl.textContent = T('objEscape');
+    showBanner(T('bannerCaught'));
+    showMessage(T('msgCaught'), 6);
+    sfx.meow();
+    setTimeout(function () { sfx.meow(); }, 250);
+    // scout patrols outside the cell door
+    spawnSoldier(PRISON_X - 9, PRISON_Z, null, { force: true });
+    spawnSoldier(PRISON_X - 8, PRISON_Z - 4, null, { force: true });
+    spawnSoldier(PRISON_X - 8, PRISON_Z + 4, null, { force: true });
+    if (level >= 2) spawnSoldier(PRISON_X - 11, PRISON_Z, null, { guard: true, force: true });
+    updateHud();
+  }
+  function restoreObjective() {
+    if (endless) {
+      currentObjectiveKey = null;
+      objectiveEl.textContent = T('objEndless', wave);
+    } else {
+      setObjective('obj' + level);
+    }
+  }
+
   // royal wrath: approach (or wound) the Cat King and EVERY cat hunts you alone
   var wrath = false;
   function updateWrath() {
@@ -3079,10 +3227,15 @@
   }
 
   // pick what a cat foot unit should chase
+  function meleePlayerHit(d) {
+    lastHitWasMelee = true;
+    hurtPlayer(d);
+    lastHitWasMelee = false;
+  }
   function catPickTarget(s) {
     if (wrath) {
       // the king's fury overrides every other order — hunt the player, only the player
-      return { pos: player.pos, hit: function (d) { hurtPlayer(d); }, aggro: 1e9 };
+      return { pos: player.pos, hit: meleePlayerHit, aggro: 1e9 };
     }
     if (s.mission === 'raid' && mouseKing.alive) {
       return { pos: mouseKing.pos, hit: function (d) { damageMouseKing(d); }, aggro: 1e9 };
@@ -3092,7 +3245,7 @@
       var d = Math.hypot(pos.x - s.pos.x, pos.z - s.pos.z);
       if (d < bestD) { bestD = d; best = { pos: pos, hit: hit, d: d }; }
     }
-    consider(player.pos, function (d) { hurtPlayer(d); });
+    consider(player.pos, meleePlayerHit);
     allies.forEach(function (a) { consider(a.pos, function (d) { damageAlly(a, d); }); });
     mouseGuards.forEach(function (g) { consider(g.pos, function (d) { damageMouseGuard(g, d); }); });
     if (mouseKing.alive) consider(mouseKing.pos, function (d) { damageMouseKing(d); });
@@ -3337,6 +3490,40 @@
     }
   }
 
+  // ---------- mortars with telegraphed danger circles ----------
+  var mortars = [];
+  var mortarHints = 0;
+  function launchMortar(t) {
+    var mx = player.pos.x + (Math.random() - 0.5) * 4;
+    var mz = player.pos.z + (Math.random() - 0.5) * 4;
+    var ring = new THREE.Mesh(
+      new THREE.RingGeometry(4.6, 5.4, 26),
+      new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(mx, baseGroundAt(mx, mz) + 0.08, mz);
+    scene.add(ring);
+    mortars.push({ x: mx, z: mz, t: 1.6, mesh: ring, dmgMul: (t.dmgMul || 1) * 1.2 });
+    playTone(220, 90, 0.4, 0.18, 'sine');
+    if (mortarHints < 2) { mortarHints++; showMessage(T('msgMortar'), 2.5); }
+  }
+  function updateMortars(dt) {
+    for (var k = mortars.length - 1; k >= 0; k--) {
+      var m = mortars[k];
+      m.t -= dt;
+      var urgency = m.t < 0.5 ? 18 : 9;
+      m.mesh.material.opacity = 0.35 + Math.abs(Math.sin(elapsed * urgency)) * 0.4;
+      m.mesh.scale.setScalar(0.7 + (1 - m.t / 1.6) * 0.3);
+      if (m.t <= 0) {
+        scene.remove(m.mesh);
+        m.mesh.geometry.dispose();
+        m.mesh.material.dispose();
+        explode(new THREE.Vector3(m.x, baseGroundAt(m.x, m.z) + 0.6, m.z), false, m.dmgMul);
+        mortars.splice(k, 1);
+      }
+    }
+  }
+
   function updateBillboards() {
     var q = camera.quaternion;
     tanks.forEach(function (t) { if (t.alive) t.bar.quaternion.copy(q); });
@@ -3451,6 +3638,7 @@
       updateMouseGuards(dt);
       updateAllies(dt);
       updateProjectiles(dt);
+      updateMortars(dt);
       updateHud();
       if (messageTimer > 0) {
         messageTimer -= dt;
