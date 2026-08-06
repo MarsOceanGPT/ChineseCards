@@ -67,6 +67,7 @@
       eliteSwift: 'SWIFT CAT', eliteBoomer: 'BOOM CAT',
       msgCaught: '😾 A cat dragged you to PRISON! They forgot to take your fireworks — blast your way out and reunite with the mice!',
       msgMortar: '⚠ MORTAR INCOMING — get out of the red circle!',
+      msgRescue: '🐭 You freed a captured mouse soldier — he joins the fight! (+100)',
       objEscape: 'CAPTURED — escape the cat prison and return to the Mouse King!',
       msgReunion: '🐭 Reunited with the mice! Back to the war! (+150)',
       bannerCaught: 'CAPTURED!',
@@ -133,6 +134,7 @@
       eliteSwift: '疾风猫', eliteBoomer: '自爆猫',
       msgCaught: '😾 你被猫抓进了监狱!还好它们忘了搜走你的烟花——轰出一条路,回到鼠群身边!',
       msgMortar: '⚠ 迫击炮来袭——快离开红圈!',
+      msgRescue: '🐭 你救出了一名被俘的鼠兵——他加入了战斗!(+100)',
       objEscape: '被俘 —— 逃出猫监狱,回到鼠国王身边!',
       msgReunion: '🐭 与鼠群重聚!重返战场!(+150)',
       bannerCaught: '被 俘!',
@@ -800,10 +802,14 @@
     }
   })();
 
-  // ---------- the cat prison (a grim gray cell out east) ----------
-  var PRISON_X = 48, PRISON_Z = -44;
+  // ---------- the cat prison: a cell block with a corridor out east ----------
+  // corridor runs along x≈43.5, three cells on the east side; the only exit
+  // faces home (+z); other cells hold captured mouse soldiers you can free
+  var PRISON_X = 50.5, PRISON_Z = -44;
+  var prisoners = [];
   (function buildPrison() {
     var grayMatP = new THREE.MeshLambertMaterial({ color: 0x757a80 });
+    var darkMatP = new THREE.MeshLambertMaterial({ color: 0x4a4038 });
     function pWall(x, z, w, d) {
       var m = new THREE.Mesh(new THREE.BoxGeometry(w, 5, d), grayMatP);
       m.position.set(x, 2.5, z);
@@ -811,34 +817,53 @@
       scene.add(m);
       addObstacleCollider(x, z, w / 2, d / 2, 5);
     }
-    pWall(PRISON_X, PRISON_Z - 5.5, 12, 1);              // north
-    pWall(PRISON_X, PRISON_Z + 5.5, 12, 1);              // south
-    pWall(PRISON_X + 5.5, PRISON_Z, 1, 12);              // east
-    pWall(PRISON_X - 5.5, PRISON_Z - 3.25, 1, 4.5);      // west (door gap in the middle)
-    pWall(PRISON_X - 5.5, PRISON_Z + 3.25, 1, 4.5);
-    // roof + grim floor + cell furnishings
-    var roof = new THREE.Mesh(new THREE.BoxGeometry(13, 0.4, 13), new THREE.MeshLambertMaterial({ color: 0x5c6167 }));
-    roof.position.set(PRISON_X, 5.2, PRISON_Z);
+    pWall(48, -56, 14, 1);           // far (north) wall
+    pWall(50, -32, 10, 1);           // south wall, east of the exit
+    pWall(41.5, -32, 1, 1);          // south wall stub, west of the exit (gap x 42..45)
+    pWall(41, -44, 1, 24);           // west outer wall (corridor side)
+    pWall(55, -44, 1, 24);           // east outer wall
+    pWall(50.5, -48, 9, 1);          // cell partition
+    pWall(50.5, -40, 9, 1);          // cell partition
+    // cell fronts along the corridor, each with a doorway
+    [-52, -44, -36].forEach(function (zc) {
+      pWall(46, zc - 2.6, 1, 2.8);
+      pWall(46, zc + 2.6, 1, 2.8);
+    });
+    // roof + floor
+    var roof = new THREE.Mesh(new THREE.BoxGeometry(15, 0.4, 25), new THREE.MeshLambertMaterial({ color: 0x5c6167 }));
+    roof.position.set(48, 5.3, -44);
     roof.castShadow = true; roof.receiveShadow = true;
     scene.add(roof);
-    platforms.push({ x: PRISON_X, z: PRISON_Z, hx: 6.5, hz: 6.5, y: 5.4 });
-    var cellFloor = new THREE.Mesh(new THREE.PlaneGeometry(11, 11), new THREE.MeshLambertMaterial({ color: 0x62666c }));
+    platforms.push({ x: 48, z: -44, hx: 7.5, hz: 12.5, y: 5.5 });
+    var cellFloor = new THREE.Mesh(new THREE.PlaneGeometry(13.6, 23.6), new THREE.MeshLambertMaterial({ color: 0x62666c }));
     cellFloor.rotation.x = -Math.PI / 2;
-    cellFloor.position.set(PRISON_X, 0.03, PRISON_Z);
+    cellFloor.position.set(48, 0.03, -44);
     scene.add(cellFloor);
-    var bunk = new THREE.Mesh(new THREE.BoxGeometry(3, 0.5, 1.4), new THREE.MeshLambertMaterial({ color: 0x4a4038 }));
-    bunk.position.set(PRISON_X + 3.5, 0.25, PRISON_Z - 3.5);
-    scene.add(bunk);
-    // barred window on the north wall
-    for (var b = 0; b < 4; b++) {
-      var bar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 6), new THREE.MeshLambertMaterial({ color: 0x2e3236 }));
-      bar.position.set(PRISON_X - 1.5 + b * 1, 3.2, PRISON_Z - 5.5 - 0.55);
-      scene.add(bar);
-    }
-    // one cold lamp so the cell isn't pitch black
-    var lamp = new THREE.PointLight(0xa8c0e0, 1.1, 18);
-    lamp.position.set(PRISON_X, 4.2, PRISON_Z);
-    scene.add(lamp);
+    // bunks + barred windows per cell
+    [-52, -44, -36].forEach(function (zc) {
+      var bunk = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.5, 1.3), darkMatP);
+      bunk.position.set(53.2, 0.25, zc + 2.4);
+      scene.add(bunk);
+      for (var b = 0; b < 3; b++) {
+        var bar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 6), new THREE.MeshLambertMaterial({ color: 0x2e3236 }));
+        bar.position.set(55.6, 3.2, zc - 1 + b);
+        scene.add(bar);
+      }
+    });
+    // cold corridor lamps
+    [[43.5, -38], [43.5, -50], [50.5, -44]].forEach(function (L) {
+      var lamp = new THREE.PointLight(0xa8c0e0, 0.9, 15);
+      lamp.position.set(L[0], 4.2, L[1]);
+      scene.add(lamp);
+    });
+    // captured mouse soldiers in the other two cells, waiting for rescue
+    [[51, -52], [51, -36]].forEach(function (P) {
+      var m = buildMouse({ color: 0x9a7b5a, helmet: true });
+      m.position.set(P[0], 0, P[1]);
+      m.rotation.y = Math.PI / 2; // facing the corridor, hoping
+      scene.add(m);
+      prisoners.push({ mesh: m, x: P[0], z: P[1], freed: false });
+    });
   })();
 
   // ---------- trenches ----------
@@ -1535,18 +1560,19 @@
   });
 
   var allies = [];
-  [[-3.5, 96.5], [3.5, 96.5], [0, 91]].forEach(function (s) {
+  function addAlly(x, z) {
     var m = buildMouse({ color: 0x9a7b5a, helmet: true, launcher: true });
     scene.add(m);
     var bar = buildHpBar(1.0, 2.3, 0x4a86d8);
     m.add(bar);
     allies.push({
       mesh: m, bar: bar,
-      pos: new THREE.Vector3(s[0], 0, s[1]),
+      pos: new THREE.Vector3(x, 0, z),
       hp: ALLY_HP, maxHp: ALLY_HP,
       ammo: 0, cool: 1 + Math.random() * 2, walkT: Math.random() * 10
     });
-  });
+  }
+  [[-3.5, 96.5], [3.5, 96.5], [0, 91]].forEach(function (s) { addAlly(s[0], s[1]); });
 
   // ---------- pickups ----------
   var pickups = []; // {mesh,x,z,t,type,amount,respawn,timer(active when >0 hidden)}
@@ -2079,7 +2105,7 @@
     if (z > HOUSE_Z - 14 && Math.abs(x) < 20) return false;   // keep the house area clear
     if (Math.abs(x) < 5) return false;                        // keep the main path clear
     if (baseGroundAt(x, z) < 0) return false;                 // never inside a trench
-    if (Math.hypot(x - 48, z + 44) < 12) return false;        // keep the prison yard clear
+    if (x > 37 && x < 59 && z > -61 && z < -27) return false; // keep the prison block clear
     return true;
   }
   for (var n = 0; n < 46; n++) {
@@ -2926,6 +2952,20 @@
       player.hp = Math.min(PLAYER_MAX_HP, player.hp + 2.5 * DIFF().regen * dt);
     }
 
+    // free captured mouse soldiers from their cells — they join the fight
+    for (var pi = 0; pi < prisoners.length; pi++) {
+      var pr = prisoners[pi];
+      if (!pr.freed && Math.hypot(player.pos.x - pr.x, player.pos.z - pr.z) < 4) {
+        pr.freed = true;
+        scene.remove(pr.mesh);
+        addAlly(pr.x, pr.z);
+        addScore(100);
+        showMessage(T('msgRescue'), 3.5);
+        sfx.squeak();
+        sfx.fanfare();
+      }
+    }
+
     // escaped the prison and made it home — reunion!
     if (imprisoned) {
       var nearKing = mouseKing.alive &&
@@ -3190,11 +3230,12 @@
     showMessage(T('msgCaught'), 6);
     sfx.meow();
     setTimeout(function () { sfx.meow(); }, 250);
-    // scout patrols outside the cell door
-    spawnSoldier(PRISON_X - 9, PRISON_Z, null, { force: true });
-    spawnSoldier(PRISON_X - 8, PRISON_Z - 4, null, { force: true });
-    spawnSoldier(PRISON_X - 8, PRISON_Z + 4, null, { force: true });
-    if (level >= 2) spawnSoldier(PRISON_X - 11, PRISON_Z, null, { guard: true, force: true });
+    // patrols in the corridor and outside the block's only exit
+    spawnSoldier(43.5, -40, null, { force: true });
+    spawnSoldier(43.5, -48, null, { force: true });
+    spawnSoldier(43.5, -28, null, { force: true });
+    spawnSoldier(46.5, -26, null, { force: true });
+    if (level >= 2) spawnSoldier(44, -23, null, { guard: true, force: true });
     updateHud();
   }
   function restoreObjective() {
@@ -3493,7 +3534,19 @@
   // ---------- mortars with telegraphed danger circles ----------
   var mortars = [];
   var mortarHints = 0;
+  // no mortars where there's a roof overhead — prison block, house, castle courtyard
+  function mortarSafeAt(x, z, y) {
+    if (y > 4) return false; // standing ON a roof is fair game
+    if (x > 40 && x < 56 && z > -57 && z < -31) return true;                       // prison block
+    if (Math.abs(x - HOUSE_X) < 12.5 && z > HOUSE_Z - 8.5 && z < HOUSE_Z + 8.5) return true;  // the house
+    if (Math.abs(x) < 26 && z > CASTLE_Z - 23 && z < CASTLE_Z + 21) return true;   // castle grounds
+    return false;
+  }
   function launchMortar(t) {
+    if (mortarSafeAt(player.pos.x, player.pos.z, player.pos.y)) {
+      t.mortarT = 2.5; // hold fire and check again soon
+      return;
+    }
     var mx = player.pos.x + (Math.random() - 0.5) * 4;
     var mz = player.pos.z + (Math.random() - 0.5) * 4;
     var ring = new THREE.Mesh(
