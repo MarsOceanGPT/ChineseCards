@@ -18,7 +18,7 @@
       victoryTitle: 'VICTORY!', victoryText: 'The Cat King has fallen. The fields are safe for mousekind!',
       againBtn: 'PLAY AGAIN', rankCaption: 'BATTLE RANK',
       hpLabel: 'MOUSE HP', mouseKingBar: '🐭 MOUSE KING', catKingBar: '♛ CAT KING ♛',
-      ammoHint: 'FIREWORKS · TAP / [1][2] SWITCH', scoreLabel: 'SCORE',
+      ammoHint: 'TAP / [1][2][3] · ⛏ digs & chops', scoreLabel: 'SCORE',
       bestLine: '🏆 BEST: {0} · RANK {1}',
       obj1: 'LEVEL 1 · SKIRMISH — wipe out the cat scout patrol!',
       obj2: 'LEVEL 2 · INVASION — destroy the cat armor column!',
@@ -68,6 +68,10 @@
       msgCaught: '😾 A cat dragged you to PRISON! They forgot to take your fireworks — blast your way out and reunite with the mice!',
       msgMortar: '⚠ MORTAR INCOMING — get out of the red circle!',
       msgRescue: '🐭 You freed a captured mouse soldier — he joins the fight! (+100)',
+      msgWood: '🪵 Timber! The wood becomes a ladder 🪜 (you have {0})',
+      msgNoLadder: 'No ladders! Chop a tree (3 hits) to craft one.',
+      msgLadderPlaced: '🪜 Ladder placed!',
+      msgShovelHint: '🪏 SHOVEL: click ground to dig a square · chop trees ×3 for ladders · click inside a pit to place a ladder',
       objEscape: 'CAPTURED — escape the cat prison and return to the Mouse King!',
       msgReunion: '🐭 Reunited with the mice! Back to the war! (+150)',
       bannerCaught: 'CAPTURED!',
@@ -85,7 +89,7 @@
       victoryTitle: '胜利!', victoryText: '猫国王被击败,鼠国的原野安全了!',
       againBtn: '再玩一次', rankCaption: '战斗评级',
       hpLabel: '小鼠生命值', mouseKingBar: '🐭 鼠国王', catKingBar: '♛ 猫国王 ♛',
-      ammoHint: '烟花弹药 · 点这里/[1][2]切换', scoreLabel: '得分',
+      ammoHint: '点这里/[1][2][3]切换 · ⛏挖土砍树', scoreLabel: '得分',
       bestLine: '🏆 最高纪录: {0} 分 · {1} 级',
       obj1: '第一关 · 遭遇战 —— 消灭猫军侦察小队!',
       obj2: '第二关 · 大入侵 —— 摧毁猫军装甲部队!',
@@ -135,6 +139,10 @@
       msgCaught: '😾 你被猫抓进了监狱!还好它们忘了搜走你的烟花——轰出一条路,回到鼠群身边!',
       msgMortar: '⚠ 迫击炮来袭——快离开红圈!',
       msgRescue: '🐭 你救出了一名被俘的鼠兵——他加入了战斗!(+100)',
+      msgWood: '🪵 树倒了!木头做成了一把梯子 🪜(现有 {0} 把)',
+      msgNoLadder: '没有梯子!砍树(3 下)就能做一把。',
+      msgLadderPlaced: '🪜 梯子放好了!',
+      msgShovelHint: '🪏 铲子:点地面挖一格坑 · 砍树×3 得梯子 · 在坑里点地面放梯子',
       objEscape: '被俘 —— 逃出猫监狱,回到鼠国王身边!',
       msgReunion: '🐭 与鼠群重聚!重返战场!(+150)',
       bannerCaught: '被 俘!',
@@ -254,6 +262,9 @@
     { x: -34, z: -92, hx: 2, hz: 26, d: CAT_TRENCH_D },
     { x: 34, z: -92, hx: 2, hz: 26, d: CAT_TRENCH_D }
   ];
+  var dugPits = [];   // player-excavated grid squares {x, z, hx, hz, d}
+  var trees = [];     // choppable trees {mesh, x, z, hits, collider, shakeT}
+
   // climbable ladders: {x, z, base, top, ex/ez = exit nudge at the top}
   var LADDERS = [
     { x: 13.2, z: 100, top: 6.15, base: 0, ex: 0.5, ez: 0 },        // house roof (attic)
@@ -328,28 +339,35 @@
   grassTex.repeat.set(26, 40);
   grassTex.colorSpace = THREE.SRGBColorSpace;
 
-  // the ground is a shape with holes cut where the trenches are dug
+  // the ground is a shape with holes cut where trenches (and shovel digs) are
   grassTex.repeat.set(0.14, 0.14);
-  var gShape = new THREE.Shape();
-  var GX = MAP_X + 30, GZ0 = MAP_Z_MIN - 40, GZ1 = MAP_Z_MAX + 40;
-  gShape.moveTo(-GX, -GZ1);
-  gShape.lineTo(GX, -GZ1);
-  gShape.lineTo(GX, -GZ0);
-  gShape.lineTo(-GX, -GZ0);
-  gShape.closePath();
-  TRENCH_RECTS.forEach(function (r) {
-    var h = new THREE.Path();
-    h.moveTo(r.x - r.hx, -(r.z - r.hz));
-    h.lineTo(r.x + r.hx, -(r.z - r.hz));
-    h.lineTo(r.x + r.hx, -(r.z + r.hz));
-    h.lineTo(r.x - r.hx, -(r.z + r.hz));
-    h.closePath();
-    gShape.holes.push(h);
-  });
-  var ground = new THREE.Mesh(new THREE.ShapeGeometry(gShape), new THREE.MeshLambertMaterial({ map: grassTex }));
+  function buildGroundGeometry() {
+    var gShape = new THREE.Shape();
+    var GX = MAP_X + 30, GZ0 = MAP_Z_MIN - 40, GZ1 = MAP_Z_MAX + 40;
+    gShape.moveTo(-GX, -GZ1);
+    gShape.lineTo(GX, -GZ1);
+    gShape.lineTo(GX, -GZ0);
+    gShape.lineTo(-GX, -GZ0);
+    gShape.closePath();
+    TRENCH_RECTS.concat(dugPits).forEach(function (r) {
+      var h = new THREE.Path();
+      h.moveTo(r.x - r.hx, -(r.z - r.hz));
+      h.lineTo(r.x + r.hx, -(r.z - r.hz));
+      h.lineTo(r.x + r.hx, -(r.z + r.hz));
+      h.lineTo(r.x - r.hx, -(r.z + r.hz));
+      h.closePath();
+      gShape.holes.push(h);
+    });
+    return new THREE.ShapeGeometry(gShape);
+  }
+  var ground = new THREE.Mesh(buildGroundGeometry(), new THREE.MeshLambertMaterial({ map: grassTex }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
+  function rebuildGround() {
+    ground.geometry.dispose();
+    ground.geometry = buildGroundGeometry();
+  }
 
   var pathMat = new THREE.MeshLambertMaterial({ color: 0x8a6f45 });
   var pathA = new THREE.Mesh(new THREE.PlaneGeometry(8, MAP_Z_MAX - (-64)), pathMat);
@@ -534,8 +552,13 @@
   var pits = [];      // sunken regions {x, z, hx, hz, depth}
 
   function baseGroundAt(x, z) {
-    for (var k = 0; k < TRENCH_RECTS.length; k++) {
-      var p = TRENCH_RECTS[k];
+    var k, p;
+    for (k = 0; k < TRENCH_RECTS.length; k++) {
+      p = TRENCH_RECTS[k];
+      if (Math.abs(x - p.x) < p.hx && Math.abs(z - p.z) < p.hz) return -p.d;
+    }
+    for (k = 0; k < dugPits.length; k++) {
+      p = dugPits[k];
       if (Math.abs(x - p.x) < p.hx && Math.abs(z - p.z) < p.hz) return -p.d;
     }
     return 0;
@@ -683,7 +706,8 @@
     g.add(l2);
     g.position.set(x, 0, z);
     scene.add(g);
-    addObstacleCollider(x, z, 0.5 * s, 0.5 * s, 1.6 * s);
+    var col = addObstacleCollider(x, z, 0.5 * s, 0.5 * s, 1.6 * s);
+    trees.push({ mesh: g, x: x, z: z, hits: 0, collider: col, shakeT: 0 });
   }
 
   // ---------- castle (cat side) ----------
@@ -906,23 +930,26 @@
       scene.add(rail);
     });
     platforms.push({ x: 0, z: -68, hx: 2.5, hz: 3.4, y: 0.19 });
-    // ladder visuals (trench ladders; the roof ladder is built with the house)
-    var railMat = new THREE.MeshLambertMaterial({ color: 0x8a6234 });
     LADDERS.forEach(function (l) {
       if (l.top > 1) return; // roof ladder already has a mesh
-      var h = l.top - l.base + 0.5;
-      [-0.5, 0.5].forEach(function (o) {
-        var rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, h, 0.1), railMat);
-        rail.position.set(l.x, l.base + h / 2, l.z + o);
-        scene.add(rail);
-      });
-      for (var rg = 0; rg < Math.floor(h / 0.5); rg++) {
-        var rung = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.0), railMat);
-        rung.position.set(l.x, l.base + 0.3 + rg * 0.5, l.z);
-        scene.add(rung);
-      }
+      buildLadderVisual(l);
     });
   })();
+
+  var ladderRailMat = new THREE.MeshLambertMaterial({ color: 0x8a6234 });
+  function buildLadderVisual(l) {
+    var h = l.top - l.base + 0.5;
+    [-0.5, 0.5].forEach(function (o) {
+      var rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, h, 0.1), ladderRailMat);
+      rail.position.set(l.x, l.base + h / 2, l.z + o);
+      scene.add(rail);
+    });
+    for (var rg = 0; rg < Math.floor(h / 0.5); rg++) {
+      var rung = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.0), ladderRailMat);
+      rung.position.set(l.x, l.base + 0.3 + rg * 0.5, l.z);
+      scene.add(rung);
+    }
+  }
 
   // ---------- mouse builder (player / king / allies / guards / leaders) ----------
   function buildMouse(opts) {
@@ -1523,6 +1550,7 @@
     hp: PLAYER_MAX_HP,
     ammo: 0,
     seekers: 0,
+    ladders: 0,
     weapon: 'normal',
     velX: 0, velZ: 0, velY: 0,
     rapidT: 0,
@@ -2359,7 +2387,8 @@
     if (e.code === 'KeyF' || e.code === 'Enter') { e.preventDefault(); tryShoot(); }
     if (e.code === 'Digit1') setWeapon('normal');
     if (e.code === 'Digit2') setWeapon('seeker');
-    if (e.code === 'KeyQ') setWeapon(player.weapon === 'normal' ? 'seeker' : 'normal');
+    if (e.code === 'Digit3') setWeapon('shovel');
+    if (e.code === 'KeyQ') cycleWeapon();
   });
   document.addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -2399,26 +2428,36 @@
   });
   document.addEventListener('mouseup', function (e) {
     if (dragAim && !pointerLocked && state === 'playing' && dragAim.moved < 6) {
-      tryShoot(enemyTargetAt(e.clientX, e.clientY));
+      var tp = player.weapon === 'shovel' ? null : enemyTargetAt(e.clientX, e.clientY);
+      tryShoot(tp, e.clientX, e.clientY);
     }
     dragAim = null;
   });
 
   // weapon switch (HUD tap/click)
   var ammoWrap = document.getElementById('ammo-wrap');
+  var shovelHintShown = false;
   function setWeapon(w) {
     player.weapon = w;
     document.getElementById('ammo-normal').classList.toggle('active', w === 'normal');
     document.getElementById('ammo-seeker').classList.toggle('active', w === 'seeker');
+    document.getElementById('ammo-shovel').classList.toggle('active', w === 'shovel');
+    if (w === 'shovel' && !shovelHintShown && state === 'playing') {
+      shovelHintShown = true;
+      showMessage(T('msgShovelHint'), 5);
+    }
+  }
+  function cycleWeapon() {
+    setWeapon(player.weapon === 'normal' ? 'seeker' : player.weapon === 'seeker' ? 'shovel' : 'normal');
   }
   ammoWrap.addEventListener('click', function (e) {
     e.stopPropagation();
-    setWeapon(player.weapon === 'normal' ? 'seeker' : 'normal');
+    cycleWeapon();
   });
   ammoWrap.addEventListener('touchstart', function (e) { e.preventDefault(); e.stopPropagation(); }, { passive: false });
   ammoWrap.addEventListener('touchend', function (e) {
     e.preventDefault(); e.stopPropagation();
-    setWeapon(player.weapon === 'normal' ? 'seeker' : 'normal');
+    cycleWeapon();
   }, { passive: false });
 
   // ---------- touch controls ----------
@@ -2501,8 +2540,12 @@
         }
         if (t.identifier === aimTouch.id) {
           if (state === 'playing' && aimTouch.moved < 14 && performance.now() - aimTouch.startT < 400) {
-            var target = enemyTargetAt(t.clientX, t.clientY);
-            if (target) tryShoot(target);
+            if (player.weapon === 'shovel') {
+              tryShoot(null, t.clientX, t.clientY);
+            } else {
+              var target = enemyTargetAt(t.clientX, t.clientY);
+              if (target) tryShoot(target);
+            }
           }
           aimTouch.id = null;
         }
@@ -2539,7 +2582,151 @@
     return best;
   }
 
-  function tryShoot(targetPos) {
+  // ---------- shovel: dig squares, chop trees, place ladders ----------
+  var CELL = 4, SHOVEL_RANGE = 13;
+  var dugWalls = {}; // "gx,gz" -> {n,s,e,w} wall meshes
+  var dugFloorMat = new THREE.MeshLambertMaterial({ color: 0x44331f });
+  var dugWallMat = new THREE.MeshLambertMaterial({ color: 0x5d452c });
+
+  function cellBlocked(cx, cz) {
+    if (Math.abs(cx) > MAP_X - 3 || cz < MAP_Z_MIN + 4 || cz > MAP_Z_MAX - 4) return true;
+    var k;
+    for (k = 0; k < TRENCH_RECTS.length; k++) {
+      var r = TRENCH_RECTS[k];
+      if (Math.abs(cx - r.x) < r.hx + 2 && Math.abs(cz - r.z) < r.hz + 2) return true;
+    }
+    for (k = 0; k < obstacles.length; k++) {
+      var o = obstacles[k];
+      if (Math.abs(cx - o.x) < o.hx + 2 && Math.abs(cz - o.z) < o.hz + 2) return true;
+    }
+    if (Math.abs(cx - HOUSE_X) < 15 && Math.abs(cz - HOUSE_Z) < 11) return true;   // house floor
+    if (cx > 38 && cx < 58 && cz > -59 && cz < -29) return true;                    // prison floor
+    if (Math.abs(cx) < 28 && cz > CASTLE_Z - 24 && cz < CASTLE_Z + 22) return true; // castle grounds
+    return false;
+  }
+
+  function digCell(x, z) {
+    var gx = Math.floor(x / CELL), gz = Math.floor(z / CELL);
+    var cx = gx * CELL + CELL / 2, cz = gz * CELL + CELL / 2;
+    if (cellBlocked(cx, cz)) { playNoise(0.08, 0.2, 500); return; }
+    dugPits.push({ x: cx, z: cz, hx: CELL / 2, hz: CELL / 2, d: 3 });
+    var floor = new THREE.Mesh(new THREE.PlaneGeometry(CELL, CELL), dugFloorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(cx, -3 + 0.02, cz);
+    scene.add(floor);
+    // walls only where the neighbor square isn't dug (merged trenches stay open)
+    var key = gx + ',' + gz;
+    var rec = {};
+    var dirs = [
+      { k: 'n', nk: gx + ',' + (gz - 1), x: cx, z: cz - CELL / 2, w: CELL + 0.3, dep: 0.3, opp: 's' },
+      { k: 's', nk: gx + ',' + (gz + 1), x: cx, z: cz + CELL / 2, w: CELL + 0.3, dep: 0.3, opp: 'n' },
+      { k: 'w', nk: (gx - 1) + ',' + gz, x: cx - CELL / 2, z: cz, w: 0.3, dep: CELL + 0.3, opp: 'e' },
+      { k: 'e', nk: (gx + 1) + ',' + gz, x: cx + CELL / 2, z: cz, w: 0.3, dep: CELL + 0.3, opp: 'w' }
+    ];
+    dirs.forEach(function (d) {
+      var nb = dugWalls[d.nk];
+      if (nb && nb[d.opp]) {
+        scene.remove(nb[d.opp]);
+        nb[d.opp] = null;
+      } else {
+        var wall = new THREE.Mesh(new THREE.BoxGeometry(d.w, 3.12, d.dep), dugWallMat);
+        wall.position.set(d.x, (-3 + 0.12) / 2, d.z);
+        scene.add(wall);
+        rec[d.k] = wall;
+      }
+    });
+    dugWalls[key] = rec;
+    rebuildGround();
+    sparkBurst(new THREE.Vector3(cx, 0.6, cz), 14, 0.09, 4, 0.4, 0.4);
+    playNoise(0.15, 0.3, 700);
+    playTone(160, 70, 0.12, 0.15, 'sine');
+  }
+
+  function chopTree(tr) {
+    tr.hits++;
+    tr.shakeT = 0.35;
+    playNoise(0.09, 0.35, 1400);
+    playTone(110, 60, 0.1, 0.2, 'sine');
+    tmpColor.set(0x4f8a3d);
+    for (var k = 0; k < 8; k++) {
+      spawnParticle(new THREE.Vector3(tr.x + (Math.random() - 0.5) * 2, 2.5 + Math.random() * 2, tr.z + (Math.random() - 0.5) * 2),
+        new THREE.Vector3((Math.random() - 0.5) * 3, -1 - Math.random() * 2, (Math.random() - 0.5) * 3),
+        tmpColor.clone(), 0.9, { gravity: 4, size: 0.35, endSize: 0.15 });
+    }
+    if (tr.hits >= 3) {
+      scene.remove(tr.mesh);
+      var ci = obstacles.indexOf(tr.collider);
+      if (ci >= 0) obstacles.splice(ci, 1);
+      trees.splice(trees.indexOf(tr), 1);
+      player.ladders++;
+      showMessage(T('msgWood', player.ladders), 3.5);
+      sfx.pickup();
+      updateHud();
+    }
+  }
+
+  function tryPlaceLadder(p) {
+    if (player.ladders <= 0) { showMessage(T('msgNoLadder'), 2.5); return; }
+    var base = baseGroundAt(p.x, p.z);
+    var ex = 2, ez = 0;
+    var found = false;
+    [[CELL, 0], [-CELL, 0], [0, CELL], [0, -CELL]].some(function (d) {
+      if (baseGroundAt(p.x + d[0], p.z + d[1]) >= 0) {
+        ex = d[0] / 2; ez = d[1] / 2;
+        found = true;
+        return true;
+      }
+      return false;
+    });
+    var lad = { x: p.x, z: p.z, top: 0.02, base: base, ex: ex, ez: ez };
+    LADDERS.push(lad);
+    buildLadderVisual(lad);
+    player.ladders--;
+    showMessage(T('msgLadderPlaced'), 2);
+    sfx.pickup();
+    updateHud();
+  }
+
+  function shovelAction(clientX, clientY) {
+    if (player.fireCooldown > 0) return;
+    player.fireCooldown = 0.32;
+    var ndc = new THREE.Vector2(
+      (clientX / window.innerWidth) * 2 - 1,
+      -(clientY / window.innerHeight) * 2 + 1
+    );
+    raycaster.setFromCamera(ndc, camera);
+    // trees first
+    var treeMeshes = trees.map(function (t) { return t.mesh; });
+    var hits = raycaster.intersectObjects(treeMeshes, true);
+    if (hits.length) {
+      var obj = hits[0].object;
+      for (var ti = 0; ti < trees.length; ti++) {
+        var tr = trees[ti];
+        var isIt = false;
+        tr.mesh.traverse(function (c) { if (c === obj) isIt = true; });
+        if (isIt) {
+          if (Math.hypot(tr.x - player.pos.x, tr.z - player.pos.z) < SHOVEL_RANGE) chopTree(tr);
+          return;
+        }
+      }
+    }
+    // then the ground
+    var origin = raycaster.ray.origin, dir = raycaster.ray.direction;
+    var planeY = baseGroundAt(player.pos.x, player.pos.z) < 0 ? player.pos.y : 0;
+    if (dir.y >= -0.02) return;
+    var tt = (planeY - origin.y) / dir.y;
+    var px = origin.x + dir.x * tt, pz = origin.z + dir.z * tt;
+    if (Math.hypot(px - player.pos.x, pz - player.pos.z) > SHOVEL_RANGE) { playNoise(0.06, 0.12, 500); return; }
+    if (baseGroundAt(px, pz) < 0) tryPlaceLadder(new THREE.Vector3(px, 0, pz));
+    else digCell(px, pz);
+  }
+
+  function tryShoot(targetPos, screenX, screenY) {
+    if (player.weapon === 'shovel') {
+      shovelAction(screenX !== undefined ? screenX : window.innerWidth / 2,
+        screenY !== undefined ? screenY : window.innerHeight / 2);
+      return;
+    }
     if (player.fireCooldown > 0) return;
     var isSeeker = player.weapon === 'seeker';
     if (isSeeker && player.seekers <= 0) {
@@ -2584,6 +2771,7 @@
   var healthBar = document.getElementById('health-bar');
   var ammoNormalEl = document.querySelector('#ammo-normal span');
   var ammoSeekerEl = document.querySelector('#ammo-seeker span');
+  var ammoShovelEl = document.querySelector('#ammo-shovel span');
   var messageEl = document.getElementById('message');
   var kingWrap = document.getElementById('king-hp-wrap');
   var kingBar = document.getElementById('king-hp');
@@ -2595,6 +2783,7 @@
     healthBar.style.width = Math.max(0, (player.hp / PLAYER_MAX_HP) * 100) + '%';
     ammoNormalEl.textContent = player.ammo;
     ammoSeekerEl.textContent = player.seekers;
+    ammoShovelEl.textContent = player.ladders;
     mkBar.style.width = Math.max(0, (mouseKing.hp / mouseKing.maxHp) * 100) + '%';
     if (king && king.alive && Math.hypot(player.pos.x - king.x, player.pos.z - king.z) < 65) {
       kingWrap.classList.remove('hidden');
@@ -2829,7 +3018,8 @@
     var tvz = len > 0 ? (mz / len) * speed : 0;
 
     // fell into the cat army's trap trench — warn once per fall
-    if (player.pos.y < -2.6) {
+    // (your own dug pits are 3.0 deep; only the cat trench reaches 3.4)
+    if (player.pos.y < -3.15) {
       if (!trapWarned) { trapWarned = true; showMessage(T('msgTrap'), 4); sfx.meow(); }
     } else if (player.pos.y > -1) {
       trapWarned = false;
@@ -3112,7 +3302,7 @@
 
       var dx = player.pos.x - t.x, dz = player.pos.z - t.z;
       var dist = Math.hypot(dx, dz);
-      if (dist > (wrath ? 78 : t.range)) return;
+      // cat tanks see the whole battlefield — distance is no shield
 
       // tanks ADVANCE: once they spot you, they rumble toward you
       if (!t.isKing && dist > 20) {
@@ -3156,8 +3346,9 @@
       t.head.rotation.y = t.headYaw - t.bodyYaw;
 
       // mortar lob with a telegraphed danger circle — camping is not a strategy
+      // (mortars have a max range, unlike the cats' eyes)
       t.mortarT -= dt;
-      if (t.mortarT <= 0) {
+      if (t.mortarT <= 0 && dist < 95) {
         t.mortarT = (10 + Math.random() * 5) * DIFF().reload / t.rateMul / dda;
         launchMortar(t);
       }
@@ -3290,7 +3481,7 @@
     allies.forEach(function (a) { consider(a.pos, function (d) { damageAlly(a, d); }); });
     mouseGuards.forEach(function (g) { consider(g.pos, function (d) { damageMouseGuard(g, d); }); });
     if (mouseKing.alive) consider(mouseKing.pos, function (d) { damageMouseKing(d); });
-    if (best && bestD > 90) return null;
+    // cats have eyes everywhere — no safe sniping distance
     return best;
   }
 
@@ -3310,7 +3501,7 @@
       // imperial guards hold their post until provoked
       if (s.stationed) {
         var provoked = s.hp < s.maxHp || (king && king.alive && king.hp < king.maxHp) ||
-          Math.hypot(player.pos.x - s.pos.x, player.pos.z - s.pos.z) < 22;
+          Math.hypot(player.pos.x - s.pos.x, player.pos.z - s.pos.z) < 40;
         if (!provoked) {
           s.mesh.position.copy(s.pos);
           continue;
@@ -3595,6 +3786,13 @@
       c.mesh.position.x += c.speed * dt;
       if (c.mesh.position.x > 140) c.mesh.position.x = -140;
     });
+    // chopped trees wobble
+    trees.forEach(function (tr) {
+      if (tr.shakeT > 0) {
+        tr.shakeT -= dt;
+        tr.mesh.rotation.z = Math.sin(elapsed * 30) * 0.06 * (tr.shakeT / 0.35);
+      }
+    });
     // butterflies flutter along wandering loops
     butterflies.forEach(function (b) {
       var u = b.userData;
@@ -3783,7 +3981,8 @@
     player: player, tanks: tanks, soldiers: soldiers, allies: allies,
     mouseKing: mouseKing, mouseGuards: mouseGuards, camera: camera,
     pickups: pickups, damageTank: damageTank, spawnSoldier: spawnSoldier,
-    hurtPlayer: hurtPlayer,
+    hurtPlayer: hurtPlayer, digCell: digCell, tryPlaceLadder: tryPlaceLadder,
+    trees: trees, dugPits: dugPits, chopTree: chopTree,
     getDda: function () { return dda; },
     getKing: function () { return king; },
     getLevel: function () { return level; },
