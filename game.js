@@ -192,7 +192,7 @@
     var acc = stats.shots > 5 ? stats.hits / stats.shots : 0.5;
     if (acc > 0.55) nudge += 0.02;
     else if (acc < 0.3) nudge -= 0.02;
-    dda = Math.max(0.78, Math.min(1.3, dda + nudge));
+    dda = Math.max(0.65, Math.min(1.3, dda + nudge));
   }
 
   // ---------- achievements ----------
@@ -242,8 +242,8 @@
   var SOLDIER_SPEED = 6.2, SOLDIER_DAMAGE = 8, SOLDIER_RANGE = 2.4;
   var GUARD_HP = 200, GUARD_DAMAGE = 24, GUARD_SPEED = 4.4;
   var MOUSE_KING_HP = 250;
-  var MOUSE_GUARD_HP = 140, MOUSE_GUARD_DAMAGE = 24;
-  var ALLY_HP = 40;
+  var MOUSE_GUARD_HP = 200, MOUSE_GUARD_DAMAGE = 24;
+  var ALLY_HP = 70;
   var MAX_SOLDIERS = 9;
   var HOUSE_X = 0, HOUSE_Z = 106;
   var CASTLE_Z = -95;
@@ -716,7 +716,7 @@
     m.position.set(x, h / 2, z);
     m.castShadow = true; m.receiveShadow = true;
     scene.add(m);
-    addObstacleCollider(x, z, w / 2, d / 2, h);
+    addObstacleCollider(x, z, w / 2 + 0.15, d / 2 + 0.15, h);
   }
   function castleTower(x, z) {
     var t = new THREE.Mesh(new THREE.CylinderGeometry(3, 3.4, 14, 10), stoneMat);
@@ -747,7 +747,8 @@
     m.position.set(x, h / 2, z);
     m.castShadow = true; m.receiveShadow = true;
     scene.add(m);
-    addObstacleCollider(x, z, w / 2, d / 2, h);
+    // slightly fat collider so fast cats can't tunnel through thin walls
+    addObstacleCollider(x, z, w / 2 + 0.15, d / 2 + 0.15, h);
     return m;
   }
 
@@ -839,7 +840,7 @@
       m.position.set(x, 2.5, z);
       m.castShadow = true; m.receiveShadow = true;
       scene.add(m);
-      addObstacleCollider(x, z, w / 2, d / 2, 5);
+      addObstacleCollider(x, z, w / 2 + 0.15, d / 2 + 0.15, 5);
     }
     pWall(48, -56, 14, 1);           // far (north) wall
     pWall(50, -32, 10, 1);           // south wall, east of the exit
@@ -3302,11 +3303,13 @@
 
       var dx = player.pos.x - t.x, dz = player.pos.z - t.z;
       var dist = Math.hypot(dx, dz);
-      // cat tanks see the whole battlefield — distance is no shield
+      // tanks see the whole battlefield — but not through walls:
+      // ducking indoors breaks their line of sight (unless at the doorstep)
+      if (playerIndoors() && dist > 22) return;
 
       // tanks ADVANCE: once they spot you, they rumble toward you
       if (!t.isKing && dist > 20) {
-        var spd = 2.6;
+        var spd = 1.9;
         var nx = t.x + (dx / dist) * spd * dt;
         var nz = t.z + (dz / dist) * spd * dt;
         var okMove = baseGroundAt(nx, nz) === 0 &&
@@ -3349,13 +3352,13 @@
       // (mortars have a max range, unlike the cats' eyes)
       t.mortarT -= dt;
       if (t.mortarT <= 0 && dist < 95) {
-        t.mortarT = (10 + Math.random() * 5) * DIFF().reload / t.rateMul / dda;
+        t.mortarT = (16 + Math.random() * 8) * DIFF().reload / t.rateMul / dda;
         launchMortar(t);
       }
 
       t.fireTimer -= dt;
       if (t.fireTimer <= 0 && Math.abs(diff) < 0.25) {
-        t.fireTimer = (t.isKing ? (t.enraged ? 1.0 : 1.6) : t.reload + Math.random() * 0.6) * DIFF().reload / t.rateMul / dda;
+        t.fireTimer = (t.isKing ? (t.enraged ? 1.3 : 2.0) : t.reload + Math.random() * 0.6) * 1.35 * DIFF().reload / t.rateMul / dda;
         var muzzle = t.head.localToWorld(t.head.userData.muzzleLocal.clone());
         // tight aim, then a fanned volley of shells
         var aim = new THREE.Vector3(
@@ -3464,8 +3467,18 @@
     hurtPlayer(d);
     lastHitWasMelee = false;
   }
+  // indoors you're hidden — cats can't see through walls (unless they're
+  // practically at the door with you, or you're up on a roof)
+  function playerIndoors() {
+    if (player.pos.y > 4) return false;
+    if (Math.abs(player.pos.x - HOUSE_X) < 11.5 && Math.abs(player.pos.z - HOUSE_Z) < 7.5) return true;
+    if (player.pos.x > 42 && player.pos.x < 54.5 && player.pos.z > -55 && player.pos.z < -33) return true;
+    return false;
+  }
   function catPickTarget(s) {
-    if (wrath) {
+    var dp = Math.hypot(player.pos.x - s.pos.x, player.pos.z - s.pos.z);
+    var canSeePlayer = !playerIndoors() || dp < 14;
+    if (wrath && canSeePlayer) {
       // the king's fury overrides every other order — hunt the player, only the player
       return { pos: player.pos, hit: meleePlayerHit, aggro: 1e9 };
     }
@@ -3477,7 +3490,7 @@
       var d = Math.hypot(pos.x - s.pos.x, pos.z - s.pos.z);
       if (d < bestD) { bestD = d; best = { pos: pos, hit: hit, d: d }; }
     }
-    consider(player.pos, meleePlayerHit);
+    if (canSeePlayer) consider(player.pos, meleePlayerHit);
     allies.forEach(function (a) { consider(a.pos, function (d) { damageAlly(a, d); }); });
     mouseGuards.forEach(function (g) { consider(g.pos, function (d) { damageMouseGuard(g, d); }); });
     if (mouseKing.alive) consider(mouseKing.pos, function (d) { damageMouseKing(d); });
@@ -3515,7 +3528,9 @@
       var dist = Math.hypot(dx, dz);
       s.mesh.rotation.y = Math.atan2(-dx, -dz);
       if (dist > SOLDIER_RANGE * 0.8) {
-        tryMove(s.pos, (dx / dist) * s.speed * dt, (dz / dist) * s.speed * dt, 0.4);
+        // cap step length so fast cats can never tunnel through a wall in one frame
+        var stepLen = Math.min(s.speed * dt, 0.38);
+        tryMove(s.pos, (dx / dist) * stepLen, (dz / dist) * stepLen, 0.4);
         s.walkT += dt * (s.kind === 'catguard' ? 7 : 11);
         var swing = Math.sin(s.walkT) * 0.6;
         s.mesh.userData.legs[0].rotation.x = swing;
@@ -3533,8 +3548,7 @@
         s.attackTimer = s.atkCd;
         target.hit(s.dmg);
         if (s.kind === 'catguard') sfx.clang(); else sfx.meow();
-        s.pos.x += (dx / dist) * 0.4;
-        s.pos.z += (dz / dist) * 0.4;
+        tryMove(s.pos, (dx / dist) * 0.4, (dz / dist) * 0.4, 0.4);
       }
       s.pos.y = groundHeightAt(s.pos.x, s.pos.z, 0.4, s.pos.y);
       s.mesh.position.copy(s.pos);
