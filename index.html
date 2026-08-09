@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04121a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Cellsea — build a creature, survive the expanse</title>
 <style>
   :root {
@@ -23,8 +26,12 @@
     background: var(--bg); color: var(--text);
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     -webkit-user-select: none; user-select: none;
+    /* no pull-to-refresh, no double-tap zoom, no rubber-banding while playing */
+    touch-action: none; overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
   }
-  #game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  body { position: fixed; inset: 0; }
+  #game { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 
   .panel {
     position: absolute; background: var(--panel); border: 1px solid var(--line);
@@ -32,6 +39,7 @@
   }
 
   /* ---------- HUD ---------- */
+  #hud, #hint { pointer-events: none; }
   #hud { top: 12px; left: 12px; padding: 10px 12px; min-width: 230px; font-size: 12px; line-height: 1.55; }
   #hud .row { display: flex; justify-content: space-between; gap: 14px; }
   #hud .k { color: var(--dim); }
@@ -95,6 +103,60 @@
   }
   .big:hover { background: rgba(67,201,160,.32); }
   #dead h1 { color: var(--heart); }
+
+  /* ---------- Bench button (the only way in without a keyboard) ---------- */
+  #btn-bench {
+    position: absolute; z-index: 4; cursor: pointer; font: inherit; display: none;
+    top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
+    padding: 10px 15px; border-radius: 10px; font-size: 12px; font-weight: 600; letter-spacing: .07em;
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    backdrop-filter: blur(6px);
+  }
+  #btn-bench:hover { border-color: #57c8e8; }
+
+  /* ---------- Phones ---------- */
+  @media (max-width: 720px), (pointer: coarse) and (max-width: 900px) {
+    #hud {
+      top: calc(8px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left));
+      min-width: 0; padding: 7px 10px; font-size: 11px; line-height: 1.4;
+    }
+    #hud .row { gap: 10px; }
+    #hud .row.opt { display: none; }
+    #hint { display: none; }
+
+    /* palette becomes a bottom sheet: a scrolling row of cell chips + tools */
+    #palette {
+      top: auto; left: 0; right: 0; transform: none; width: auto; border-radius: 14px 14px 0 0;
+      bottom: 0; padding: 9px 10px calc(9px + env(safe-area-inset-bottom));
+      border-left: none; border-right: none; border-bottom: none;
+    }
+    #palette h2, #palette .sub { display: none; }
+    #cellbtns { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 3px; -webkit-overflow-scrolling: touch; }
+    .cellbtn {
+      flex: 0 0 auto; width: auto; margin: 0; flex-direction: column; align-items: center; gap: 3px;
+      padding: 8px 10px; min-width: 62px;
+    }
+    .cellbtn .ds { display: none; }
+    .cellbtn .nm { font-size: 10.5px; }
+    .cellbtn .cost { margin-left: 0; }
+    .cellbtn .sw { width: 18px; height: 18px; margin-top: 0; }
+    #palette .tools { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; }
+    .tbtn { margin-bottom: 0; flex: 1; padding: 10px 4px; font-size: 11px; }
+
+    #stats {
+      top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right));
+      left: calc(8px + env(safe-area-inset-left)); width: auto; padding: 8px 11px; font-size: 11px; line-height: 1.5;
+      display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px;
+    }
+    #stats #ed-bio { grid-column: 1 / -1; }
+    #stats .warn { grid-column: 1 / -1; margin-top: 4px; }
+    #btn-bench { padding: 9px 13px; font-size: 11px; }
+
+    .card { padding: 20px 18px; }
+    .card h1 { font-size: 21px; }
+    .card p { font-size: 12px; line-height: 1.7; }
+    #splash, #dead { padding: 14px; overflow-y: auto; }
+  }
 </style>
 </head>
 <body>
@@ -103,7 +165,7 @@
 <div id="hud" class="panel">
   <div class="row"><span class="k">hearts</span><span id="h-hearts">1</span></div>
   <div class="row"><span class="k">cells</span><span id="h-cells">9</span></div>
-  <div class="row"><span class="k">speed</span><span id="h-speed">0</span></div>
+  <div class="row opt"><span class="k">speed</span><span id="h-speed">0</span></div>
   <div class="row"><span class="k">nutrients</span><span id="h-nutri">0</span></div>
   <div class="row" style="margin-top:6px"><span class="k">biomass</span><span id="h-bio">0 / 56</span></div>
   <div id="bio-wrap"><div id="bio-bar"></div></div>
@@ -113,17 +175,20 @@
   <b>W</b> / <b>click</b> thrust &nbsp;·&nbsp; <b>A</b> <b>D</b> turn &nbsp;·&nbsp; mouse steers &nbsp;·&nbsp; <b>E</b> editor
 </div>
 
+<button id="btn-bench">BENCH</button>
+
 <div id="editor">
   <canvas id="edit-canvas"></canvas>
 
   <div id="palette" class="panel">
     <h2>Cell bench</h2>
-    <div class="sub">Left click to place · right click to remove. New cells must touch the body.</div>
+    <div class="sub">Click to place · right click (or Remove) to take away. New cells must touch the body.</div>
     <div id="cellbtns"></div>
     <div class="tools">
       <button class="tbtn on" id="btn-sym">Symmetry: ON</button>
-      <button class="tbtn" id="btn-clear">Reset to starter</button>
-      <button class="tbtn go" id="btn-apply">Grow into it &nbsp;(E)</button>
+      <button class="tbtn" id="btn-erase">Remove</button>
+      <button class="tbtn" id="btn-clear">Reset</button>
+      <button class="tbtn go" id="btn-apply">Grow into it</button>
     </div>
   </div>
 
@@ -150,8 +215,10 @@
        <span>Armour</span> is tough but heavy.
        <span>Spikes</span> shear off whatever cell they touch, and clack harmlessly off other spikes.
        <span>Flagella</span> push away from themselves — mount them at the back to go forward.</p>
-    <p><span>W or click</span> to beat your flagella · <span>A / D</span> or the mouse to turn ·
-       <span>E</span> opens the bench anywhere, any time.</p>
+    <p id="how-desktop"><span>W or click</span> to beat your flagella · <span>A / D</span> or the mouse
+       to turn · <span>E</span> or the BENCH button opens the bench anywhere, any time.</p>
+    <p id="how-touch" style="display:none"><span>Touch and hold</span> anywhere to swim toward your
+       finger — drag it around to steer. <span>BENCH</span> opens the cell bench any time.</p>
     <button class="big" id="btn-start">Start swimming</button>
   </div>
 </div>
@@ -901,7 +968,8 @@ function gainNutrients(n) {
 /* -------------------------------------------------------------------- input */
 
 const keys = new Set();
-const mouse = { x: 0, y: 0, down: false, inWorld: true };
+const mouse = { x: 0, y: 0, down: false, steering: false };
+const TOUCH = matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
 
 addEventListener("keydown", e => {
   if (e.repeat) return;
@@ -932,11 +1000,33 @@ function resize() {
   ec.style.width = W + "px"; ec.style.height = H + "px";
 }
 addEventListener("resize", resize);
+addEventListener("orientationchange", () => setTimeout(resize, 120));
+// the mobile URL bar sliding away changes innerHeight without a resize event
+if (window.visualViewport) visualViewport.addEventListener("resize", resize);
 
-canvas.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+canvas.addEventListener("mousemove", e => {
+  mouse.x = e.clientX; mouse.y = e.clientY; mouse.steering = true;
+});
 canvas.addEventListener("mousedown", e => { if (e.button === 0) mouse.down = true; });
 addEventListener("mouseup", () => { mouse.down = false; });
 canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+// One finger does everything: hold to beat your flagella, drag to aim. Touching
+// also cancels the synthesised mouse events, so the two paths never double up.
+function touchAim(e) {
+  const t = e.touches[0];
+  if (!t) return;
+  mouse.x = t.clientX; mouse.y = t.clientY;
+  mouse.down = true; mouse.steering = true;
+}
+canvas.addEventListener("touchstart", e => { e.preventDefault(); touchAim(e); }, { passive: false });
+canvas.addEventListener("touchmove", e => { e.preventDefault(); touchAim(e); }, { passive: false });
+function endTouch(e) {
+  if (e.touches.length) { touchAim(e); return; }
+  mouse.down = false; mouse.steering = false;
+}
+canvas.addEventListener("touchend", endTouch);
+canvas.addEventListener("touchcancel", endTouch);
 
 function hexPath(c, x, y, rot, size) {
   c.beginPath();
@@ -1146,13 +1236,15 @@ function update(dt) {
     let steer = 0;
     if (keys.has("a") || keys.has("arrowleft")) steer -= 1;
     if (keys.has("d") || keys.has("arrowright")) steer += 1;
-    if (steer === 0) {
-      // steer toward the pointer when the keys are idle
+    if (steer === 0 && mouse.steering) {
+      // steer toward the pointer when the turn keys are idle
       const wx = cam.x + (mouse.x - W / 2) / cam.zoom;
       const wy = cam.y + (mouse.y - H / 2) / cam.zoom;
-      const want = Math.atan2(wy - p.y, wx - p.x);
-      const diff = angleDiff(p.angle, want);
-      if (Math.abs(diff) > 0.06) steer = clamp(diff * 1.9, -1, 1);
+      // a dead zone, or a finger resting on top of you spins the creature
+      if (Math.hypot(wx - p.x, wy - p.y) > p.radius * 0.8 + 20) {
+        const diff = angleDiff(p.angle, Math.atan2(wy - p.y, wx - p.x));
+        if (Math.abs(diff) > 0.06) steer = clamp(diff * 1.9, -1, 1);
+      }
     }
     p.steer = steer;
     p.thrust = (keys.has("w") || keys.has("arrowup") || mouse.down) ? 1 : 0;
@@ -1256,7 +1348,10 @@ function housekeeping(dt) {
     const tx = p.x + p.vx * lead, ty = p.y + p.vy * lead;
     cam.x = lerp(cam.x, tx, 1 - Math.exp(-6 * dt));
     cam.y = lerp(cam.y, ty, 1 - Math.exp(-6 * dt));
-    const want = clamp(150 / Math.max(p.radius, 60), 0.62, 1.25);
+    // Fit a target span of water to the *short* screen edge, so a phone sees
+    // about as much sea as a desktop instead of a keyhole three times tighter.
+    const span = Math.max(p.radius * 8, 620);
+    const want = clamp(Math.min(W, H) / span, 0.38, 1.35);
     cam.zoom = lerp(cam.zoom, want, 1 - Math.exp(-2.5 * dt));
     shake = Math.max(0, shake - dt * 2.6);
   }
@@ -1284,6 +1379,7 @@ function updateHUD() {
 let editorOpen = false;
 let selectedType = "normal";
 let symmetry = true;
+let eraseMode = false;
 let editDesign = null;
 const edCanvas = el("edit-canvas");
 const edCtx = edCanvas.getContext("2d");
@@ -1301,7 +1397,7 @@ function buildPalette() {
       '<span class="sw" style="background:' + d.color + ';border:1px solid ' + d.edge + '"></span>' +
       '<span><span class="nm">' + d.name + '</span><br><span class="ds">' + d.desc + '</span></span>' +
       '<span class="cost">' + d.cost + '</span>';
-    b.onclick = () => { selectedType = t; buildPalette(); };
+    b.onclick = () => { selectedType = t; eraseMode = false; buildPalette(); refreshEditorStats(); };
     host.appendChild(b);
   }
 }
@@ -1310,6 +1406,7 @@ function toggleEditor() {
   if (splash.style.display !== "none") return;
   editorOpen = !editorOpen;
   el("editor").classList.toggle("open", editorOpen);
+  el("btn-bench").style.display = editorOpen ? "none" : "block";
   const deadCard = el("dead");
   if (editorOpen) {
     // you can rethink the body while dissolved — hide the death card underneath
@@ -1356,12 +1453,39 @@ function refreshEditorStats() {
   el("s-warn").textContent = warns.join(" ");
   el("btn-sym").textContent = "Symmetry: " + (symmetry ? "ON" : "OFF");
   el("btn-sym").classList.toggle("on", symmetry);
+  el("btn-erase").classList.toggle("on", eraseMode);
+}
+
+const EDIT_RADIUS = 6;          // buildable rings on the bench
+
+/**
+ * Where the bench grid sits on screen. On a phone the palette is a bottom
+ * sheet and the stats a top bar, so the grid is centred in what is left and
+ * scaled to fit — the hexes stay big enough to hit with a thumb.
+ */
+function edLayout() {
+  const narrow = W < 720;
+  const top = narrow ? 76 : 0;
+  const bottom = narrow ? 152 : 0;
+  const availW = narrow ? W - 16 : W - 300;
+  const availH = H - top - bottom - 16;
+  const extent = (EDIT_RADIUS + 1.1) * HEX * SQ3;   // half-width of the grid
+  const zoom = clamp(Math.min(availW, availH) / (extent * 2), 0.8, 1.9);
+  return { cx: narrow ? W / 2 : W / 2, cy: top + (H - top - bottom) / 2, zoom };
 }
 
 function edWorldFromScreen(mx, my) {
-  return { x: (mx - W / 2) / EDIT_ZOOM, y: (my - H / 2) / EDIT_ZOOM };
+  const L = edLayout();
+  return { x: (mx - L.cx) / L.zoom, y: (my - L.cy) / L.zoom };
 }
-const EDIT_ZOOM = 1.5;
+
+function edHoverAt(mx, my) {
+  const w = edWorldFromScreen(mx, my);
+  const a = pixelToAxial(w.x, w.y);
+  const dist = (Math.abs(a.q) + Math.abs(a.r) + Math.abs(a.q + a.r)) / 2;
+  edMouse.hover = dist <= EDIT_RADIUS ? a : null;
+  edMouse.inside = true;
+}
 
 function editorPlace(remove) {
   const h = edMouse.hover;
@@ -1425,17 +1549,18 @@ function applyDesign() {
 
 function renderEditor() {
   const c = edCtx;
+  const L = edLayout();
   c.setTransform(DPR, 0, 0, DPR, 0, 0);
   c.clearRect(0, 0, W, H);
   c.save();
-  c.translate(W / 2, H / 2);
-  c.scale(EDIT_ZOOM, EDIT_ZOOM);
+  c.translate(L.cx, L.cy);
+  c.scale(L.zoom, L.zoom);
 
   const d = editDesign || design;
   const occupied = new Map(d.map(x => [key(x.q, x.r), x]));
 
   // buildable grid
-  const slots = hexDisc(7);
+  const slots = hexDisc(EDIT_RADIUS);
   for (const s of slots) {
     if (occupied.has(key(s.q, s.r))) continue;
     const adjacent = HEX_DIRS.some(([dq, dr]) => occupied.has(key(s.q + dq, s.r + dr)));
@@ -1445,18 +1570,20 @@ function renderEditor() {
     c.lineWidth = 1; c.stroke();
   }
 
+  const gridX = EDIT_RADIUS * HEX * SQ3;      // half-width of the grid in world px
+
   // symmetry axis
   if (symmetry) {
     c.beginPath();
-    c.moveTo(-HEX * 18, 0); c.lineTo(HEX * 18, 0);
+    c.moveTo(-gridX - 10, 0); c.lineTo(gridX + 10, 0);
     c.strokeStyle = "rgba(140,225,255,.22)";
     c.setLineDash([5, 6]); c.lineWidth = 1; c.stroke(); c.setLineDash([]);
   }
 
-  // forward arrow
+  // forward arrow, just clear of the grid so it never clips off a phone screen
   c.save();
   c.globalAlpha = .55;
-  c.translate(HEX * 14, 0);
+  c.translate(gridX + 14, 0);
   c.beginPath(); c.moveTo(12, 0); c.lineTo(-6, 7); c.lineTo(-6, -7); c.closePath();
   c.fillStyle = "#7fd8f0"; c.fill();
   c.font = "9px ui-monospace, monospace"; c.fillStyle = "#7fd8f0";
@@ -1477,6 +1604,22 @@ function renderEditor() {
       const m = mirrorAxial(edMouse.hover.q, edMouse.hover.r);
       if (m.q !== edMouse.hover.q || m.r !== edMouse.hover.r) ghosts.push(m);
     }
+    if (eraseMode) {
+      for (const g of ghosts) {
+        if (!occupied.has(key(g.q, g.r))) continue;
+        const p = axialToPixel(g.q, g.r);
+        hexPath(c, p.x, p.y, 0, HEX * 0.92);
+        c.fillStyle = "rgba(232,69,95,.42)"; c.fill();
+        c.strokeStyle = "#e8455f"; c.lineWidth = 1.6; c.stroke();
+        c.beginPath();
+        c.moveTo(p.x - 5, p.y - 5); c.lineTo(p.x + 5, p.y + 5);
+        c.moveTo(p.x + 5, p.y - 5); c.lineTo(p.x - 5, p.y + 5);
+        c.strokeStyle = "#ffdfe4"; c.lineWidth = 2; c.stroke();
+      }
+      c.restore();
+      return;
+    }
+
     // price the whole mirrored pair, matching how editorPlace commits it
     let pairCost = designCost(d);
     for (const g of ghosts) {
@@ -1498,21 +1641,34 @@ function renderEditor() {
   c.restore();
 }
 
-edCanvas.addEventListener("mousemove", e => {
-  edMouse.inside = true;
-  const w = edWorldFromScreen(e.clientX, e.clientY);
-  const a = pixelToAxial(w.x, w.y);
-  edMouse.hover = (Math.abs(a.q) + Math.abs(a.r) + Math.abs(a.q + a.r)) / 2 <= 7 ? a : null;
-});
+edCanvas.addEventListener("mousemove", e => edHoverAt(e.clientX, e.clientY));
 edCanvas.addEventListener("mouseleave", () => { edMouse.inside = false; });
 edCanvas.addEventListener("mousedown", e => {
   e.preventDefault();
-  editorPlace(e.button === 2);
+  edHoverAt(e.clientX, e.clientY);
+  editorPlace(e.button === 2 || eraseMode);
 });
 edCanvas.addEventListener("contextmenu", e => e.preventDefault());
 
+// Touch: tap a hex to place (or remove, in Remove mode); dragging only moves
+// the ghost, so a stray swipe can never paint half your biomass away.
+edCanvas.addEventListener("touchstart", e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  if (!t) return;
+  edHoverAt(t.clientX, t.clientY);
+  editorPlace(eraseMode);
+}, { passive: false });
+edCanvas.addEventListener("touchmove", e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  if (t) edHoverAt(t.clientX, t.clientY);
+}, { passive: false });
+
 el("btn-sym").onclick = () => { symmetry = !symmetry; refreshEditorStats(); };
+el("btn-erase").onclick = () => { eraseMode = !eraseMode; refreshEditorStats(); };
 el("btn-clear").onclick = () => { editDesign = starterDesign(); refreshEditorStats(); };
+el("btn-bench").onclick = () => toggleEditor();
 el("btn-apply").onclick = () => toggleEditor();
 
 /* ------------------------------------------------------------- start / die */
@@ -1521,6 +1677,7 @@ const splash = el("splash");
 
 function startGame() {
   splash.style.display = "none";
+  el("btn-bench").style.display = "block";
   try {
     const n = parseInt(localStorage.getItem("cellsea.nutrients") || "0", 10);
     if (!Number.isNaN(n) && n > 0) { world.nutrients = n; world.cap = capForNutrients(n); }
@@ -1586,6 +1743,11 @@ function frame(now) {
   if (editorOpen) renderEditor();
   updateHUD();
   requestAnimationFrame(frame);
+}
+
+if (TOUCH) {
+  el("how-desktop").style.display = "none";
+  el("how-touch").style.display = "block";
 }
 
 resize();
