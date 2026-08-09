@@ -99,3 +99,13 @@ coordinates; mirroring across the forward axis is `(q, r) → (q + r, −r)`.
 Physics runs on fixed sub-steps so collisions stay stable at any framerate,
 while spawning, culling and the camera run once per frame. Your blueprint and
 nutrient count are saved to `localStorage`.
+
+## Playing it
+
+Open `index.html` in any browser — desktop or phone, no build step.
+
+On a phone, one finger does everything: hold to swim, drag to steer. The BENCH
+button replaces the `E` key, and Remove mode replaces right click.
+
+To host it somewhere that wraps pages in its own document skeleton, run
+`python3 tools/build-artifact.py` and publish `.artifact/cellsea.html`.
