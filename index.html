@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Cellsea — build a creature, survive the expanse</title>
+<style>
+  :root {
+    --bg: #04121a;
+    --panel: rgba(6, 24, 34, 0.88);
+    --line: rgba(120, 205, 235, 0.22);
+    --text: #cfeaf5;
+    --dim: #7fa6b8;
+    --heart: #e8455f;
+    --normal: #e7b48c;
+    --armor: #eef4f7;
+    --spike: #b9c2c8;
+    --flag: #8fd6a8;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-user-select: none; user-select: none;
+  }
+  #game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+
+  .panel {
+    position: absolute; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; backdrop-filter: blur(6px);
+  }
+
+  /* ---------- HUD ---------- */
+  #hud { top: 12px; left: 12px; padding: 10px 12px; min-width: 230px; font-size: 12px; line-height: 1.55; }
+  #hud .row { display: flex; justify-content: space-between; gap: 14px; }
+  #hud .k { color: var(--dim); }
+  #bio-wrap { margin-top: 7px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.09); overflow: hidden; }
+  #bio-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #43c9a0, #8fd6a8); transition: width .15s linear; }
+  #bio-bar.over { background: linear-gradient(90deg, #e8455f, #ff8a6a); }
+  .chip { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+  #hint { bottom: 12px; left: 12px; padding: 8px 12px; font-size: 11px; color: var(--dim); line-height: 1.7; }
+  #hint b { color: var(--text); font-weight: 600; }
+
+  /* ---------- Editor ---------- */
+  #editor { inset: 0; position: absolute; display: none; z-index: 5; background: rgba(3, 12, 18, .72); backdrop-filter: blur(3px); }
+  #editor.open { display: block; }
+  #edit-canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+  #palette { top: 50%; left: 14px; transform: translateY(-50%); padding: 12px; width: 232px; font-size: 12px; }
+  #palette h2 { margin: 0 0 4px; font-size: 13px; letter-spacing: .09em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+  #palette .sub { color: var(--dim); font-size: 10.5px; line-height: 1.5; margin-bottom: 10px; }
+  .cellbtn {
+    display: flex; gap: 9px; align-items: flex-start; width: 100%; text-align: left;
+    padding: 7px 8px; margin-bottom: 5px; border-radius: 7px; cursor: pointer;
+    background: rgba(255,255,255,.04); border: 1px solid transparent; color: var(--text);
+    font: inherit; font-size: 11.5px;
+  }
+  .cellbtn:hover { background: rgba(255,255,255,.09); }
+  .cellbtn.sel { border-color: #57c8e8; background: rgba(87,200,232,.14); }
+  .cellbtn .sw { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 auto; margin-top: 1px; }
+  .cellbtn .nm { font-weight: 600; }
+  .cellbtn .ds { color: var(--dim); font-size: 10px; line-height: 1.4; }
+  .cellbtn .cost { margin-left: auto; color: var(--dim); font-size: 10px; white-space: nowrap; }
+  #palette .tools { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 9px; }
+  .tbtn {
+    display: block; width: 100%; margin-bottom: 5px; padding: 7px; border-radius: 7px; cursor: pointer;
+    background: rgba(255,255,255,.05); border: 1px solid var(--line); color: var(--text); font: inherit; font-size: 11.5px;
+  }
+  .tbtn:hover { background: rgba(255,255,255,.1); }
+  .tbtn.on { background: rgba(87,200,232,.16); border-color: #57c8e8; }
+  .tbtn.go { background: rgba(67,201,160,.18); border-color: #43c9a0; color: #ccf6e6; font-weight: 600; }
+  #stats { top: 14px; right: 14px; padding: 11px 13px; width: 210px; font-size: 11.5px; line-height: 1.65; }
+  #stats .row { display: flex; justify-content: space-between; }
+  #stats .k { color: var(--dim); }
+  #stats .warn { color: #ffb27a; margin-top: 7px; font-size: 10.5px; line-height: 1.45; }
+  #ed-bio { margin-top: 7px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.09); overflow: hidden; }
+  #ed-bio > div { height: 100%; width: 0%; background: linear-gradient(90deg, #43c9a0, #8fd6a8); }
+  #ed-bio > div.over { background: linear-gradient(90deg, #e8455f, #ff8a6a); }
+
+  /* ---------- Overlays ---------- */
+  #splash, #dead {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(3, 12, 18, .8); backdrop-filter: blur(4px); text-align: center;
+  }
+  #dead { display: none; }
+  .card { max-width: 560px; padding: 26px 30px; }
+  .card h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: .16em; text-transform: uppercase; }
+  .card .tag { color: var(--dim); font-size: 12px; margin-bottom: 18px; letter-spacing: .05em; }
+  .card p { font-size: 12.5px; line-height: 1.8; color: var(--text); margin: 0 0 14px; text-align: left; }
+  .card p span { color: var(--dim); }
+  .big {
+    padding: 11px 26px; border-radius: 9px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;
+    background: rgba(67,201,160,.2); border: 1px solid #43c9a0; color: #ccf6e6; letter-spacing: .06em;
+  }
+  .big:hover { background: rgba(67,201,160,.32); }
+  #dead h1 { color: var(--heart); }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" class="panel">
+  <div class="row"><span class="k">hearts</span><span id="h-hearts">1</span></div>
+  <div class="row"><span class="k">cells</span><span id="h-cells">9</span></div>
+  <div class="row"><span class="k">speed</span><span id="h-speed">0</span></div>
+  <div class="row"><span class="k">nutrients</span><span id="h-nutri">0</span></div>
+  <div class="row" style="margin-top:6px"><span class="k">biomass</span><span id="h-bio">0 / 56</span></div>
+  <div id="bio-wrap"><div id="bio-bar"></div></div>
+</div>
+
+<div id="hint" class="panel">
+  <b>W</b> / <b>click</b> thrust &nbsp;·&nbsp; <b>A</b> <b>D</b> turn &nbsp;·&nbsp; mouse steers &nbsp;·&nbsp; <b>E</b> editor
+</div>
+
+<div id="editor">
+  <canvas id="edit-canvas"></canvas>
+
+  <div id="palette" class="panel">
+    <h2>Cell bench</h2>
+    <div class="sub">Left click to place · right click to remove. New cells must touch the body.</div>
+    <div id="cellbtns"></div>
+    <div class="tools">
+      <button class="tbtn on" id="btn-sym">Symmetry: ON</button>
+      <button class="tbtn" id="btn-clear">Reset to starter</button>
+      <button class="tbtn go" id="btn-apply">Grow into it &nbsp;(E)</button>
+    </div>
+  </div>
+
+  <div id="stats" class="panel">
+    <div class="row"><span class="k">biomass</span><span id="s-bio">0 / 56</span></div>
+    <div id="ed-bio"><div></div></div>
+    <div class="row" style="margin-top:8px"><span class="k">mass</span><span id="s-mass">0</span></div>
+    <div class="row"><span class="k">muscle</span><span id="s-muscle">0%</span></div>
+    <div class="row"><span class="k">top speed</span><span id="s-speed">0</span></div>
+    <div class="row"><span class="k">turn rate</span><span id="s-turn">0</span></div>
+    <div class="row"><span class="k">toughness</span><span id="s-tough">0</span></div>
+    <div id="s-warn" class="warn"></div>
+  </div>
+</div>
+
+<div id="splash">
+  <div class="card panel">
+    <h1>Cellsea</h1>
+    <div class="tag">an eyeless thing in an endless sea</div>
+    <p>You are a handful of hexagonal cells drifting in an expanse with no edges. Build a body at the
+      bench, then go take cells off of everything else that lives out here.</p>
+    <p><span>Hearts</span> keep you alive — lose them all and you dissolve.
+       <span>Normal cells</span> are your muscle; strip them and you crawl.
+       <span>Armour</span> is tough but heavy.
+       <span>Spikes</span> shear off whatever cell they touch, and clack harmlessly off other spikes.
+       <span>Flagella</span> push away from themselves — mount them at the back to go forward.</p>
+    <p><span>W or click</span> to beat your flagella · <span>A / D</span> or the mouse to turn ·
+       <span>E</span> opens the bench anywhere, any time.</p>
+    <button class="big" id="btn-start">Start swimming</button>
+  </div>
+</div>
+
+<div id="dead">
+  <div class="card panel">
+    <h1>Dissolved</h1>
+    <div class="tag" id="dead-sub">every heart cell was destroyed</div>
+    <p style="text-align:center">Your blueprint survives, but a quarter of your nutrients did not.
+       Re-grow it, or press <span style="color:#cfeaf5">E</span> to rethink the parts that got you killed.</p>
+    <button class="big" id="btn-respawn">Re-grow</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================================
+   Cellsea — a cell-building survival game in an infinite sea.
+
+   Everything is built out of pointy-top hexagonal cells on an axial (q,r) grid.
+   A creature is a rigid body: cells sit at fixed local offsets, the body has a
+   position/angle and is pushed around by its own flagella and by collisions.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- constants */
+
+const HEX = 13;                 // hex circumradius in px (~ a fingernail)
+const SQ3 = Math.sqrt(3);
+const CELL_R = HEX * 0.86;      // collision radius of one cell (hex inradius)
+
+const LIN_DAMP = 1.0;           // water drag
+const ANG_DAMP = 3.2;
+const HULL_DRAG = 5;            // drag you pay for existing, independent of mass
+const FLAG_POWER = 1200;        // force per flagellum
+const TURN_K = 45;              // steering strength
+const SPIKE_REACH = HEX * 1.35; // how far a spike tip sticks out from its cell
+const SPIKE_CD = 0.3;           // seconds between hits from the same spike
+const SPIKE_CLASH = 11;         // tip-to-tip range at which two spikes clack
+
+const START_CAP = 56;           // starting biomass allowance (starter body costs 40)
+const CAP_PER_NUTRIENT = 0.6;
+const CAP_MAX = 240;
+const FOOD_VALUE = 2;
+
+const VIEW_SPAWN_MIN = 780;     // enemies appear in a ring around you
+const VIEW_SPAWN_MAX = 1350;
+const DESPAWN_DIST = 2400;
+const FOOD_TARGET = 240;
+const FOOD_DIST = 1750;         // food is kept in a tighter shell than creatures
+const SPAWN_SHIELD = 2.5;       // seconds of grace after (re)growing
+
+const CELLS = {
+  heart: {
+    name: "Heart",   color: "#e8455f", edge: "#7d1c2c",
+    cost: 10, mass: 1.4, hp: 2,
+    desc: "Lose every one and you dissolve."
+  },
+  normal: {
+    name: "Normal",  color: "#e7b48c", edge: "#8a6046",
+    cost: 3,  mass: 1.0, hp: 1,
+    desc: "Muscle. Few of these and you're a slow target."
+  },
+  armor: {
+    name: "Armour",  color: "#eef4f7", edge: "#94a7b2",
+    cost: 8,  mass: 3.0, hp: 3,
+    desc: "Takes three hits. Heavy — it slows you down."
+  },
+  spike: {
+    name: "Spike",   color: "#b9c2c8", edge: "#68757e",
+    cost: 7,  mass: 1.5, hp: 2,
+    desc: "Shears the cell it touches. Bounces off spikes."
+  },
+  flagellum: {
+    name: "Flagellum", color: "#8fd6a8", edge: "#3f7a58",
+    cost: 6,  mass: 0.8, hp: 1,
+    desc: "Pushes away from itself. Back = forward."
+  },
+};
+const CELL_ORDER = ["heart", "normal", "armor", "spike", "flagellum"];
+
+/* -------------------------------------------------------------- small maths */
+
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+function angleDiff(a, b) { let d = (b - a) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; }
+
+/* ------------------------------------------------------------- hex geometry */
+
+const HEX_DIRS = [[1,0], [1,-1], [0,-1], [-1,0], [-1,1], [0,1]];
+
+function axialToPixel(q, r) { return { x: HEX * SQ3 * (q + r / 2), y: HEX * 1.5 * r }; }
+
+function pixelToAxial(x, y) {
+  const rf = y / (HEX * 1.5);
+  const qf = x / (HEX * SQ3) - rf / 2;
+  // cube rounding
+  let cx = qf, cz = rf, cy = -cx - cz;
+  let rx = Math.round(cx), ry = Math.round(cy), rz = Math.round(cz);
+  const dx = Math.abs(rx - cx), dy = Math.abs(ry - cy), dz = Math.abs(rz - cz);
+  if (dx > dy && dx > dz) rx = -ry - rz; else if (dy > dz) ry = -rx - rz; else rz = -rx - ry;
+  return { q: rx, r: rz };
+}
+
+function hexRing(radius) {
+  if (radius === 0) return [{ q: 0, r: 0 }];
+  const out = [];
+  let q = HEX_DIRS[4][0] * radius, r = HEX_DIRS[4][1] * radius;
+  for (let i = 0; i < 6; i++) {
+    for (let j = 0; j < radius; j++) {
+      out.push({ q, r });
+      q += HEX_DIRS[i][0]; r += HEX_DIRS[i][1];
+    }
+  }
+  return out;
+}
+function hexDisc(radius) {
+  const out = [];
+  for (let k = 0; k <= radius; k++) out.push(...hexRing(k));
+  return out;
+}
+// mirror across the forward (+x) axis
+function mirrorAxial(q, r) { return { q: q + r, r: -r }; }
+const key = (q, r) => q + "," + r;
+
+/* ----------------------------------------------------------------- designs */
+/* A design is a plain array of { q, r, type }. */
+
+function designCost(design) {
+  let c = 0;
+  for (const c2 of design) c += CELLS[c2.type].cost;
+  return c;
+}
+
+function designCounts(design) {
+  const n = { heart: 0, normal: 0, armor: 0, spike: 0, flagellum: 0 };
+  for (const c of design) n[c.type]++;
+  return n;
+}
+
+/**
+ * Swimming performance for a set of cells.
+ *
+ * Muscle is a *fraction* of the body, not a raw count — otherwise a lone heart
+ * with one tail would be the fastest thing in the sea, and stripping a
+ * creature's normal cells would make it faster instead of leaving it crippled.
+ *
+ * The HULL_DRAG term is the other half of that: every body pays some drag just
+ * for being in the water, so shedding mass alone never buys you speed.
+ * Terminal velocity works out to force / (mass + HULL_DRAG).
+ */
+function swimStats(cells, mass) {
+  const n = designCounts(cells);
+  let normalMass = 0;
+  for (const c of cells) if (c.type === "normal") normalMass += CELLS.normal.mass;
+  const m = mass !== undefined ? mass : cells.reduce((s, c) => s + CELLS[c.type].mass, 0);
+  const muscle = m > 0 ? normalMass / m : 0;
+  const speedFactor = 0.35 + 0.9 * muscle;
+  const force = n.flagellum * FLAG_POWER * speedFactor;
+  const turnPower = (0.4 + 0.8 * n.flagellum) * (0.5 + 0.7 * muscle);
+  const linDamp = m > 0 ? LIN_DAMP * (m + HULL_DRAG) / m : LIN_DAMP;
+  return {
+    n, mass: m, muscle, speedFactor, force, turnPower, linDamp,
+    topSpeed: m > 0 ? force / (m + HULL_DRAG) : 0,
+    turnRate: m > 0 ? turnPower * TURN_K / (m + HULL_DRAG) / ANG_DAMP : 0,
+  };
+}
+
+/** Cells reachable from the hearts by hex adjacency. */
+function connectedSet(cells) {
+  const map = new Map();
+  for (const c of cells) map.set(key(c.q, c.r), c);
+  const seeds = cells.filter(c => c.type === "heart");
+  const start = seeds.length ? seeds : (cells.length ? [cells[0]] : []);
+  const seen = new Set();
+  const stack = [];
+  for (const s of start) { seen.add(key(s.q, s.r)); stack.push(s); }
+  while (stack.length) {
+    const c = stack.pop();
+    for (const [dq, dr] of HEX_DIRS) {
+      const k = key(c.q + dq, c.r + dr);
+      if (map.has(k) && !seen.has(k)) { seen.add(k); stack.push(map.get(k)); }
+    }
+  }
+  return seen;
+}
+
+function starterDesign() {
+  return [
+    { q: 0, r: 0, type: "heart" },
+    ...hexRing(1).map(h => ({ q: h.q, r: h.r, type: "normal" })),
+    { q: -2, r: 1, type: "flagellum" },
+    { q: -1, r: -1, type: "flagellum" },
+  ];
+}
+
+/* --------------------------------------------------------------- creatures */
+
+let nextId = 1;
+
+class Creature {
+  constructor(design, x, y, angle, faction) {
+    this.id = nextId++;
+    this.faction = faction;                 // "player" | "hostile" | "prey"
+    this.x = x; this.y = y; this.angle = angle;
+    this.vx = 0; this.vy = 0; this.av = 0;
+    this.thrust = 0;                        // 0..1
+    this.steer = 0;                         // -1..1
+    this.dead = false;
+    this.flagPhase = Math.random() * TAU;
+    this.shield = 0;
+    this.ai = null;
+    this.cells = design.map(c => ({
+      q: c.q, r: c.r, type: c.type,
+      hp: CELLS[c.type].hp, maxHp: CELLS[c.type].hp,
+      lx: 0, ly: 0, ox: 1, oy: 0,           // local pos + outward normal
+      wx: 0, wy: 0, cd: 0, flash: 0,
+    }));
+    this.rebuild();
+    this.syncCells();
+  }
+
+  /** Recompute centroid-relative layout, mass, inertia, outward normals. */
+  rebuild() {
+    const cells = this.cells;
+    let m = 0, cx = 0, cy = 0;
+    for (const c of cells) {
+      const p = axialToPixel(c.q, c.r);
+      const cm = CELLS[c.type].mass;
+      c._px = p.x; c._py = p.y;
+      m += cm; cx += p.x * cm; cy += p.y * cm;
+    }
+    this.mass = Math.max(m, 0.001);
+    cx /= this.mass; cy /= this.mass;
+    this.cx = cx; this.cy = cy;
+
+    const occupied = new Set(cells.map(c => key(c.q, c.r)));
+    let I = 0, radius = 0;
+    for (const c of cells) {
+      c.lx = c._px - cx; c.ly = c._py - cy;
+      I += CELLS[c.type].mass * (c.lx * c.lx + c.ly * c.ly);
+      radius = Math.max(radius, Math.hypot(c.lx, c.ly));
+
+      // outward normal = mean direction of the empty neighbour slots
+      let ox = 0, oy = 0;
+      for (const [dq, dr] of HEX_DIRS) {
+        if (occupied.has(key(c.q + dq, c.r + dr))) continue;
+        const d = axialToPixel(dq, dr);
+        const len = Math.hypot(d.x, d.y);
+        ox += d.x / len; oy += d.y / len;
+      }
+      const ol = Math.hypot(ox, oy);
+      if (ol > 1e-4) { c.ox = ox / ol; c.oy = oy / ol; }
+      else {
+        const dl = Math.hypot(c.lx, c.ly);
+        if (dl > 1e-4) { c.ox = c.lx / dl; c.oy = c.ly / dl; } else { c.ox = 1; c.oy = 0; }
+      }
+    }
+    this.inertia = Math.max(I, 40);
+    this.radius = radius + CELL_R + SPIKE_REACH;
+
+    const n = designCounts(cells);
+    this.counts = n;
+    this.hearts = n.heart;
+    const perf = swimStats(cells, this.mass);
+    this.speedFactor = perf.speedFactor;
+    this.thrustForce = perf.force;
+    this.turnPower = perf.turnPower;
+    this.maxSpeed = perf.topSpeed;
+    this.linDamp = perf.linDamp;
+    this.dragMass = this.mass + HULL_DRAG;
+  }
+
+  syncCells() {
+    const cs = Math.cos(this.angle), sn = Math.sin(this.angle);
+    for (const c of this.cells) {
+      c.wx = this.x + c.lx * cs - c.ly * sn;
+      c.wy = this.y + c.lx * sn + c.ly * cs;
+    }
+  }
+
+  worldDir(lx, ly) {
+    const cs = Math.cos(this.angle), sn = Math.sin(this.angle);
+    return { x: lx * cs - ly * sn, y: lx * sn + ly * cs };
+  }
+
+  applyImpulse(px, py, ix, iy) {
+    this.vx += ix / this.mass;
+    this.vy += iy / this.mass;
+    const rx = px - this.x, ry = py - this.y;
+    this.av += (rx * iy - ry * ix) / this.inertia;
+  }
+
+  step(dt) {
+    if (this.shield > 0) this.shield -= dt;
+    // flagella push along -outward, so a tail at the back drives you forward
+    if (this.thrust !== 0 && this.counts.flagellum > 0) {
+      const per = this.thrustForce / this.counts.flagellum * this.thrust;
+      for (const c of this.cells) {
+        if (c.type !== "flagellum") continue;
+        const d = this.worldDir(-c.ox, -c.oy);
+        this.vx += d.x * per / this.mass * dt;
+        this.vy += d.y * per / this.mass * dt;
+        const rx = c.wx - this.x, ry = c.wy - this.y;
+        this.av += (rx * d.y * per - ry * d.x * per) / this.inertia * dt;
+      }
+      this.flagPhase += dt * (7 + 5 * this.thrust);
+    } else {
+      this.flagPhase += dt * 1.6;
+    }
+
+    if (this.steer !== 0) {
+      this.av += this.steer * TURN_K * this.turnPower / this.dragMass * dt;
+    }
+
+    const ld = Math.exp(-this.linDamp * dt), ad = Math.exp(-ANG_DAMP * dt);
+    this.vx *= ld; this.vy *= ld; this.av *= ad;
+
+    // A single bad input must not be able to strand a body at NaN forever.
+    if (!Number.isFinite(this.vx) || !Number.isFinite(this.vy)) { this.vx = 0; this.vy = 0; }
+    if (!Number.isFinite(this.av)) this.av = 0;
+    if (!Number.isFinite(this.x) || !Number.isFinite(this.y)) { this.x = 0; this.y = 0; }
+    if (!Number.isFinite(this.angle)) this.angle = 0;
+
+    this.x += this.vx * dt; this.y += this.vy * dt;
+    this.angle += this.av * dt;
+    if (this.angle > Math.PI) this.angle -= TAU;
+    if (this.angle < -Math.PI) this.angle += TAU;
+
+    for (const c of this.cells) {
+      if (c.cd > 0) c.cd -= dt;
+      if (c.flash > 0) c.flash -= dt * 3.5;
+    }
+    this.syncCells();
+  }
+
+  /** Damage one cell. Returns the list of cells that fell off. */
+  damageCell(cell, amount) {
+    cell.hp -= amount;
+    cell.flash = 1;
+    if (cell.hp > 0) return [];
+
+    const lost = [cell];
+    this.cells = this.cells.filter(c => c !== cell);
+    if (this.cells.length === 0) { this.dead = true; return lost; }
+
+    if (!this.cells.some(c => c.type === "heart")) { this.dead = true; return lost.concat(this.cells); }
+
+    // anything no longer joined to a heart drifts away
+    const keep = connectedSet(this.cells);
+    const dropped = this.cells.filter(c => !keep.has(key(c.q, c.r)));
+    if (dropped.length) {
+      this.cells = this.cells.filter(c => keep.has(key(c.q, c.r)));
+      lost.push(...dropped);
+    }
+    this.rebuild();
+    this.syncCells();
+    return lost;
+  }
+}
+
+/* ------------------------------------------------------------- blueprints */
+
+function bpSpikeball() {
+  // Alternating spikes and soft cells: a wall of pure spikes would be
+  // unkillable, since spike-on-spike just clacks. The soft gaps are the way in
+  // — punch one, chew the armour behind it, and the shell falls off the heart.
+  const d = [{ q: 0, r: 0, type: "heart" }];
+  hexRing(1).forEach((h, i) => d.push({ ...h, type: i % 2 === 0 ? "armor" : "normal" }));
+  hexRing(2).forEach((h, i) => d.push({ ...h, type: i % 2 === 0 ? "spike" : "normal" }));
+  return d;
+}
+
+function bpSwimmer() {
+  const d = [{ q: 0, r: 0, type: "heart" }];
+  for (const h of hexRing(1)) d.push({ ...h, type: "normal" });
+  for (const h of hexRing(2)) {
+    const p = axialToPixel(h.q, h.r);
+    d.push({ ...h, type: p.x > 4 ? "spike" : (p.x < -8 ? "flagellum" : "normal") });
+  }
+  return d;
+}
+
+function bpHunter() {
+  const d = [{ q: 0, r: 0, type: "heart" }];
+  for (const h of hexRing(1)) d.push({ ...h, type: "armor" });
+  for (const h of hexRing(2)) {
+    const p = axialToPixel(h.q, h.r);
+    d.push({ ...h, type: p.x > 4 ? "spike" : (p.x < -8 ? "flagellum" : "armor") });
+  }
+  for (const h of hexRing(3)) {
+    const p = axialToPixel(h.q, h.r);
+    if (p.x > 14) d.push({ ...h, type: "spike" });
+    else if (p.x < -20) d.push({ ...h, type: "flagellum" });
+  }
+  return d;
+}
+
+function bpDrifter() {
+  // One tail on the centre line: slow enough that a hunting build can run it
+  // down, and it is the bottom of the food chain for a reason.
+  const d = [{ q: 0, r: 0, type: "heart" }];
+  for (const h of hexRing(1)) d.push({ ...h, type: "normal" });
+  d.push({ q: -2, r: 0, type: "flagellum" });
+  return d;
+}
+
+function bpGrazer() {
+  const d = [{ q: 0, r: 0, type: "heart" }];
+  for (const h of hexRing(1)) d.push({ ...h, type: "normal" });
+  for (const h of hexRing(2)) {
+    const p = axialToPixel(h.q, h.r);
+    d.push({ ...h, type: p.x < -30 ? "flagellum" : "normal" });
+  }
+  return d;
+}
+
+const SPECIES = {
+  spikeball: { bp: bpSpikeball, faction: "hostile", ai: "drift",  weight: 3 },
+  swimmer:   { bp: bpSwimmer,   faction: "hostile", ai: "chase",  weight: 3 },
+  hunter:    { bp: bpHunter,    faction: "hostile", ai: "chase",  weight: 1 },
+  drifter:   { bp: bpDrifter,   faction: "prey",    ai: "wander", weight: 3 },
+  grazer:    { bp: bpGrazer,    faction: "prey",    ai: "wander", weight: 2 },
+};
+
+/* -------------------------------------------------------------- world state */
+
+const world = {
+  creatures: [],
+  food: [],
+  debris: [],
+  player: null,
+  nutrients: 0,
+  cap: START_CAP,
+  time: 0,
+  running: false,
+  deathTimer: 0,
+  saveTimer: 6,
+};
+
+let design = loadDesign();
+
+function loadDesign() {
+  try {
+    const raw = localStorage.getItem("cellsea.design");
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (Array.isArray(d) && d.length && d.some(c => c.type === "heart")) return d;
+    }
+  } catch (e) { /* ignore corrupt saves */ }
+  return starterDesign();
+}
+function saveDesign() {
+  try {
+    localStorage.setItem("cellsea.design", JSON.stringify(design));
+    localStorage.setItem("cellsea.nutrients", String(world.nutrients));
+  } catch (e) { /* private mode, whatever */ }
+}
+
+function capForNutrients(n) { return Math.min(CAP_MAX, Math.floor(START_CAP + n * CAP_PER_NUTRIENT)); }
+
+function spawnPlayer() {
+  const p = new Creature(design, 0, 0, 0, "player");
+  p.shield = SPAWN_SHIELD;
+  world.player = p;
+  world.creatures.push(p);
+  return p;
+}
+
+function threatLevel() {
+  return clamp(1 + world.nutrients / 45, 1, 4.2);
+}
+
+function spawnRing(dist) {
+  const a = Math.random() * TAU;
+  const d = dist !== undefined ? dist : rand(VIEW_SPAWN_MIN, VIEW_SPAWN_MAX);
+  const p = world.player;
+  const ox = p ? p.x : 0, oy = p ? p.y : 0;
+  return { x: ox + Math.cos(a) * d, y: oy + Math.sin(a) * d };
+}
+
+function spawnCreature() {
+  const t = threatLevel();
+  const pool = [];
+  for (const [name, s] of Object.entries(SPECIES)) {
+    let w = s.weight;
+    if (name === "hunter") w = t > 2 ? s.weight * (t - 1) : 0;
+    if (name === "swimmer") w = s.weight * Math.min(t, 2.5);
+    if (name === "drifter" || name === "grazer") w = s.weight * (3 / t);
+    for (let i = 0; i < Math.round(w * 4); i++) pool.push(name);
+  }
+  if (!pool.length) return;
+  const name = pick(pool);
+  const s = SPECIES[name];
+  const { x, y } = spawnRing();
+  const c = new Creature(s.bp(), x, y, Math.random() * TAU, s.faction);
+  c.species = name;
+  c.ai = makeAI(s.ai, c.angle);
+  world.creatures.push(c);
+}
+
+/** Food arrives in loose patches — swimming somewhere should pay off. */
+function spawnFoodPatch(nearPlayer) {
+  const o = spawnRing(nearPlayer ? rand(160, FOOD_DIST) : rand(VIEW_SPAWN_MIN, FOOD_DIST));
+  const n = randInt(4, 9);
+  const spread = rand(50, 140);
+  for (let i = 0; i < n; i++) {
+    world.food.push({
+      x: o.x + rand(-spread, spread), y: o.y + rand(-spread, spread),
+      vx: rand(-6, 6), vy: rand(-6, 6), ph: Math.random() * TAU, r: rand(4, 6),
+    });
+  }
+}
+
+function seedWorld() {
+  world.creatures = world.player ? [world.player] : [];
+  world.food = [];
+  world.debris = [];
+  for (let i = 0; i < 10; i++) spawnCreature();
+  while (world.food.length < FOOD_TARGET) spawnFoodPatch(true);
+}
+
+function shedCells(creature, cells) {
+  for (const c of cells) {
+    world.debris.push({
+      x: c.wx, y: c.wy,
+      vx: creature.vx * 0.4 + rand(-40, 40),
+      vy: creature.vy * 0.4 + rand(-40, 40),
+      a: Math.random() * TAU, av: rand(-3, 3),
+      type: c.type, life: 9,
+    });
+  }
+}
+
+/* --------------------------------------------------------------------- AI */
+
+function makeAI(kind, angle) {
+  return {
+    kind,
+    t: rand(0, 3),                    // countdown to the next wander heading
+    heading: Math.random() * TAU,
+    spin: (Math.random() < 0.5 ? -1 : 1) * rand(0.5, 1.1),
+    stamina: 1,
+    phase: "aim",                     // aim -> charge -> recover, for hunters
+    aim: angle || 0,
+  };
+}
+
+function runAI(c, dt) {
+  const p = world.player;
+  const ai = c.ai;
+  ai.t -= dt;
+
+  if (ai.kind === "drift") {
+    c.thrust = 0;
+    // Drive the spin hard enough to beat ANG_DAMP: a spikeball that stops
+    // turning presents one fixed spike forever and can never be opened up.
+    c.av += (ai.spin - c.av) * Math.min(1, dt * 12);
+    // slow tumble toward the player so spikeballs aren't pure scenery
+    if (p && !p.dead) {
+      const d = Math.hypot(p.x - c.x, p.y - c.y);
+      if (d < 620) {
+        const want = Math.atan2(p.y - c.y, p.x - c.x);
+        c.vx += Math.cos(want) * 16 * dt;
+        c.vy += Math.sin(want) * 16 * dt;
+      }
+    }
+    return;
+  }
+
+  if (ai.kind === "chase") {
+    const inRange = p && !p.dead && Math.hypot(p.x - c.x, p.y - c.y) < 900;
+    if (!inRange) {
+      if (ai.t <= 0) { ai.heading = Math.random() * TAU; ai.t = rand(2, 5); }
+      c.steer = clamp(angleDiff(c.angle, ai.heading) * 1.6, -1, 1);
+      c.thrust = 0.4;
+      ai.phase = "aim";
+      return;
+    }
+
+    // Lunge, then peel away and line up again. A hunter that simply tracks you
+    // keeps its spiked face pointed at you forever, and two spiked fronts just
+    // grind against each other — the recovery phase is what exposes a flank.
+    if (ai.t <= 0) {
+      if (ai.phase === "charge") { ai.phase = "recover"; ai.t = rand(0.8, 1.5); }
+      else if (ai.phase === "recover") { ai.phase = "aim"; ai.t = rand(0.4, 0.9); }
+      else {
+        ai.phase = "charge"; ai.t = rand(0.9, 1.6);
+        ai.aim = Math.atan2(p.y - c.y, p.x - c.x) + rand(-0.25, 0.25);
+      }
+    }
+    if (ai.phase === "charge") {
+      c.steer = clamp(angleDiff(c.angle, ai.aim) * 1.2, -1, 1);
+      c.thrust = 1;
+    } else if (ai.phase === "recover") {
+      c.steer = clamp(angleDiff(c.angle, ai.aim + 1.7) * 1.2, -1, 1);
+      c.thrust = 0.35;
+    } else {
+      c.steer = clamp(angleDiff(c.angle, Math.atan2(p.y - c.y, p.x - c.x)) * 2.0, -1, 1);
+      c.thrust = 0.4;
+    }
+    return;
+  }
+
+  // wander / flee. Prey sprint, then tire — otherwise a fast grazer is simply
+  // uncatchable and there is no bottom to the food chain.
+  let flee = false;
+  if (p && !p.dead) {
+    const d = Math.hypot(p.x - c.x, p.y - c.y);
+    if (d < 700) {
+      flee = true;
+      const away = Math.atan2(c.y - p.y, c.x - p.x);
+      const diff = angleDiff(c.angle, away);
+      c.steer = clamp(diff * 2.4, -1, 1);
+      c.thrust = ai.stamina > 0 ? 1 : 0.4;
+      ai.stamina = Math.max(0, ai.stamina - dt / 3);
+    }
+  }
+  if (!flee) {
+    ai.stamina = Math.min(1, ai.stamina + dt / 9);
+    if (ai.t <= 0) { ai.heading = Math.random() * TAU; ai.t = rand(1.5, 4.5); }
+    const diff = angleDiff(c.angle, ai.heading);
+    c.steer = clamp(diff * 1.4, -1, 1);
+    c.thrust = 0.5;
+  }
+}
+
+/* -------------------------------------------------------------- collisions */
+
+function collidePair(A, B, dt) {
+  const dx = B.x - A.x, dy = B.y - A.y;
+  const rr = A.radius + B.radius;
+  if (dx * dx + dy * dy > rr * rr) return;
+
+  // --- spikes: each spike tip shears whatever single cell it is touching ---
+  spikePass(A, B);
+  spikePass(B, A);
+
+  // --- body: keep the two shapes out of each other ---
+  const minD = CELL_R * 2;
+  let handled = 0;
+  for (const a of A.cells) {
+    for (const b of B.cells) {
+      let nx = b.wx - a.wx, ny = b.wy - a.wy;
+      const d2 = nx * nx + ny * ny;
+      if (d2 > minD * minD || d2 < 1e-6) continue;
+      const d = Math.sqrt(d2);
+      nx /= d; ny /= d;
+      const pen = minD - d;
+
+      const im = 1 / A.mass + 1 / B.mass;
+      const corr = pen / im * 0.32;
+      A.x -= nx * corr / A.mass; A.y -= ny * corr / A.mass;
+      B.x += nx * corr / B.mass; B.y += ny * corr / B.mass;
+
+      const rvx = B.vx - A.vx, rvy = B.vy - A.vy;
+      const vn = rvx * nx + rvy * ny;
+      if (vn < 0) {
+        const j = -0.75 * vn / im;    // soft, so bodies can grind together
+        const px = (a.wx + b.wx) / 2, py = (a.wy + b.wy) / 2;
+        A.applyImpulse(px, py, -nx * j, -ny * j);
+        B.applyImpulse(px, py, nx * j, ny * j);
+      }
+      if (++handled > 6) return;
+    }
+  }
+}
+
+/**
+ * A's spikes against B's cells.
+ *
+ * Each spike shears the one cell its tip is touching. Other spikes are the
+ * exception — two points glance off each other rather than biting — but a
+ * spike does not act as a shield: if the tip can still reach a normal cell,
+ * that cell is what gets taken. Without that, two spiked creatures simply
+ * deadlock at tip-to-tip range and neither can ever land a hit.
+ */
+function spikePass(A, B) {
+  if (B.shield > 0) return;
+  const shearReach = CELL_R + 4;
+  for (const s of A.cells) {
+    if (s.type !== "spike" || s.cd > 0) continue;
+    const d = A.worldDir(s.ox, s.oy);
+    const tx = s.wx + d.x * SPIKE_REACH, ty = s.wy + d.y * SPIKE_REACH;
+    if (Math.hypot(tx - B.x, ty - B.y) > B.radius) continue;
+
+    let victim = null, victimD = shearReach;
+    let clash = null, clashD = SPIKE_CLASH;
+    for (const t of B.cells) {
+      const dd = Math.hypot(tx - t.wx, ty - t.wy);
+      if (t.type === "spike") {
+        const bd = B.worldDir(t.ox, t.oy);
+        // only points that are actually aimed at each other can clack
+        if (bd.x * d.x + bd.y * d.y > -0.15) continue;
+        const bx = t.wx + bd.x * SPIKE_REACH, by = t.wy + bd.y * SPIKE_REACH;
+        const td = Math.min(dd, Math.hypot(tx - bx, ty - by));
+        if (td < clashD) { clashD = td; clash = t; }
+      } else if (dd < victimD) { victimD = dd; victim = t; }
+    }
+
+    if (victim) {
+      s.cd = SPIKE_CD;
+      const lost = B.damageCell(victim, 1);
+      spark(tx, ty, CELLS[victim.type].color, 7);
+      if (B === world.player) shake = Math.min(1, shake + (lost.length ? 0.8 : 0.35));
+      if (lost.length) {
+        shedCells(B, lost);
+        if (A === world.player) gainNutrients(lost.length * 2);
+      }
+    } else if (clash) {
+      s.cd = SPIKE_CD;
+      let nx = clash.wx - s.wx, ny = clash.wy - s.wy;
+      const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+      // reactive only: it bleeds off the closing speed rather than shoving.
+      // A constant push would let two spiked creatures stalemate forever.
+      const vn = (B.vx - A.vx) * nx + (B.vy - A.vy) * ny;
+      const im = 1 / A.mass + 1 / B.mass;
+      const j = clamp(-vn, 0, 140) * 0.25 / im;
+      if (j <= 0) continue;
+      A.applyImpulse(s.wx, s.wy, -nx * j, -ny * j);
+      B.applyImpulse(clash.wx, clash.wy, nx * j, ny * j);
+      spark(tx, ty, "#dfe9ef", 4);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ effects */
+
+const particles = [];
+let shake = 0;
+function spark(x, y, color, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * TAU, sp = rand(30, 150);
+    particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(.25, .6), max: .6, color });
+  }
+}
+
+function gainNutrients(n) {
+  world.nutrients += n;
+  world.cap = capForNutrients(world.nutrients);
+}
+
+/* -------------------------------------------------------------------- input */
+
+const keys = new Set();
+const mouse = { x: 0, y: 0, down: false, inWorld: true };
+
+addEventListener("keydown", e => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (k === "e") { e.preventDefault(); toggleEditor(); return; }
+  if (k === "escape" && editorOpen) { e.preventDefault(); toggleEditor(); return; }
+  if (k === " " && !world.running && splash.style.display !== "none") { e.preventDefault(); startGame(); return; }
+  keys.add(k);
+});
+addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
+addEventListener("blur", () => keys.clear());
+
+/* ---------------------------------------------------------------- rendering */
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const cam = { x: 0, y: 0, zoom: 1 };
+let W = 0, H = 0, DPR = 1;
+
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const ec = document.getElementById("edit-canvas");
+  ec.width = Math.floor(W * DPR); ec.height = Math.floor(H * DPR);
+  ec.style.width = W + "px"; ec.style.height = H + "px";
+}
+addEventListener("resize", resize);
+
+canvas.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+canvas.addEventListener("mousedown", e => { if (e.button === 0) mouse.down = true; });
+addEventListener("mouseup", () => { mouse.down = false; });
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+function hexPath(c, x, y, rot, size) {
+  c.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = rot + (Math.PI / 180) * (60 * i - 90);
+    const px = x + Math.cos(a) * size, py = y + Math.sin(a) * size;
+    if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+  }
+  c.closePath();
+}
+
+/** Draw one cell (hex body plus spike / flagellum decoration). */
+function drawCell(c2d, cell, x, y, rot, ox, oy, phase) {
+  const def = CELLS[cell.type];
+  const hurt = cell.hp !== undefined && cell.maxHp > 1 && cell.hp < cell.maxHp;
+
+  if (cell.type === "spike") {
+    const px = -oy, py = ox;                 // perpendicular
+    const base = HEX * 0.62, len = SPIKE_REACH + HEX * 0.35;
+    c2d.beginPath();
+    c2d.moveTo(x + px * base, y + py * base);
+    c2d.lineTo(x + ox * len, y + oy * len);
+    c2d.lineTo(x - px * base, y - py * base);
+    c2d.closePath();
+    c2d.fillStyle = "#c8d1d7"; c2d.fill();
+    c2d.strokeStyle = "#79868f"; c2d.lineWidth = 1; c2d.stroke();
+  }
+
+  if (cell.type === "flagellum") {
+    const len = HEX * 2.5;
+    c2d.beginPath();
+    c2d.moveTo(x, y);
+    const px = -oy, py = ox;
+    for (let i = 1; i <= 14; i++) {
+      const t = i / 14;
+      const wob = Math.sin(phase - t * 5.2) * HEX * 0.52 * t;
+      c2d.lineTo(x + ox * len * t + px * wob, y + oy * len * t + py * wob);
+    }
+    c2d.strokeStyle = "#6fc294";
+    c2d.lineWidth = 2.4; c2d.lineCap = "round";
+    c2d.stroke();
+  }
+
+  hexPath(c2d, x, y, rot, HEX * 0.95);
+  c2d.fillStyle = def.color;
+  c2d.fill();
+  c2d.lineWidth = cell.type === "armor" ? 2 : 1.2;
+  c2d.strokeStyle = def.edge;
+  c2d.stroke();
+
+  if (cell.type === "heart") {
+    const pu = 1 + Math.sin(phase * 1.6) * 0.11;
+    c2d.beginPath();
+    c2d.arc(x, y, HEX * 0.33 * pu, 0, TAU);
+    c2d.fillStyle = "#ffd0d8"; c2d.fill();
+  }
+  if (hurt) {
+    c2d.strokeStyle = "rgba(20,10,12,.55)";
+    c2d.lineWidth = 1.4;
+    const cracks = cell.maxHp - cell.hp;
+    for (let i = 0; i < cracks; i++) {
+      const a = i * 2.2 + 0.6;
+      c2d.beginPath();
+      c2d.moveTo(x + Math.cos(a) * HEX * 0.75, y + Math.sin(a) * HEX * 0.75);
+      c2d.lineTo(x - Math.cos(a + 0.7) * HEX * 0.4, y - Math.sin(a + 0.7) * HEX * 0.4);
+      c2d.stroke();
+    }
+  }
+  if (cell.flash > 0) {
+    hexPath(c2d, x, y, rot, HEX * 0.95);
+    c2d.fillStyle = "rgba(255,255,255," + (cell.flash * 0.7) + ")";
+    c2d.fill();
+  }
+}
+
+function drawCreature(c) {
+  const cs = Math.cos(c.angle), sn = Math.sin(c.angle);
+  for (const cell of c.cells) {
+    const ox = cell.ox * cs - cell.oy * sn;
+    const oy = cell.ox * sn + cell.oy * cs;
+    drawCell(ctx, cell, cell.wx, cell.wy, c.angle, ox, oy, c.flagPhase);
+  }
+  if (c === world.player) {
+    // a faint ring so you never lose yourself in the crowd
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.radius + 6, 0, TAU);
+    ctx.strokeStyle = "rgba(120,220,255,.16)";
+    ctx.lineWidth = 1; ctx.stroke();
+  }
+  if (c.shield > 0) {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.radius + 3, 0, TAU);
+    ctx.strokeStyle = "rgba(150,235,255," + (0.15 + 0.3 * Math.abs(Math.sin(world.time * 6))) + ")";
+    ctx.lineWidth = 2; ctx.stroke();
+  }
+}
+
+function drawBackground() {
+  ctx.fillStyle = "#04121a";
+  ctx.fillRect(0, 0, W, H);
+
+  // parallax speck field, tiled in world space, so the "infinite" sea reads as motion
+  const layers = [
+    { s: 150, a: 0.10, p: 0.45, r: 1.4 },
+    { s: 90,  a: 0.16, p: 0.75, r: 1.0 },
+  ];
+  for (const L of layers) {
+    const ox = cam.x * L.p, oy = cam.y * L.p;
+    const x0 = Math.floor((ox - W / 2 / cam.zoom) / L.s) * L.s;
+    const y0 = Math.floor((oy - H / 2 / cam.zoom) / L.s) * L.s;
+    ctx.fillStyle = "rgba(140,220,255," + L.a + ")";
+    for (let x = x0; x < ox + W / cam.zoom; x += L.s) {
+      for (let y = y0; y < oy + H / cam.zoom; y += L.s) {
+        const jx = ((Math.sin(x * 0.017 + y * 0.031) * 43758.5) % 1) * L.s * 0.8;
+        const jy = ((Math.sin(x * 0.041 - y * 0.023) * 12345.7) % 1) * L.s * 0.8;
+        const sx = (x + jx - ox) * cam.zoom + W / 2;
+        const sy = (y + jy - oy) * cam.zoom + H / 2;
+        ctx.fillRect(sx, sy, L.r, L.r);
+      }
+    }
+  }
+}
+
+function render() {
+  drawBackground();
+
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  if (shake > 0) {
+    const s = shake * shake * 9;
+    ctx.translate(rand(-s, s), rand(-s, s));
+  }
+  ctx.scale(cam.zoom, cam.zoom);
+  ctx.translate(-cam.x, -cam.y);
+
+  const halfW = W / 2 / cam.zoom + 120, halfH = H / 2 / cam.zoom + 120;
+  const visible = (x, y, pad) => Math.abs(x - cam.x) < halfW + pad && Math.abs(y - cam.y) < halfH + pad;
+
+  for (const f of world.food) {
+    if (!visible(f.x, f.y, 20)) continue;
+    const pu = 1 + Math.sin(world.time * 2 + f.ph) * 0.18;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.r * pu, 0, TAU);
+    ctx.fillStyle = "rgba(120, 240, 190, .85)"; ctx.fill();
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.r * pu + 3.5, 0, TAU);
+    ctx.strokeStyle = "rgba(120, 240, 190, .2)"; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+
+  for (const d of world.debris) {
+    if (!visible(d.x, d.y, 30)) continue;
+    ctx.globalAlpha = clamp(d.life / 2.5, 0, 1) * 0.8;
+    drawCell(ctx, { type: d.type, hp: 1, maxHp: 1, flash: 0 }, d.x, d.y, d.a, Math.cos(d.a), Math.sin(d.a), world.time * 2);
+    ctx.globalAlpha = 1;
+  }
+
+  for (const c of world.creatures) {
+    if (!visible(c.x, c.y, c.radius)) continue;
+    drawCreature(c);
+  }
+
+  for (const p of particles) {
+    ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  drawOffscreenMarkers();
+}
+
+/** Little edge arrows for hostiles just outside the view — you have no eyes, but the player does. */
+function drawOffscreenMarkers() {
+  const p = world.player;
+  if (!p || p.dead) return;
+  const halfW = W / 2 / cam.zoom, halfH = H / 2 / cam.zoom;
+  for (const c of world.creatures) {
+    if (c.faction !== "hostile") continue;
+    const dx = c.x - cam.x, dy = c.y - cam.y;
+    if (Math.abs(dx) < halfW && Math.abs(dy) < halfH) continue;
+    const d = Math.hypot(dx, dy);
+    if (d > 1200) continue;
+    const a = Math.atan2(dy, dx);
+    const rx = Math.min(W, H) * 0.42;
+    const sx = W / 2 + Math.cos(a) * rx, sy = H / 2 + Math.sin(a) * rx;
+    ctx.save();
+    ctx.translate(sx, sy); ctx.rotate(a);
+    ctx.globalAlpha = clamp(1.2 - d / 1200, 0.12, 0.6);
+    ctx.beginPath();
+    ctx.moveTo(7, 0); ctx.lineTo(-5, 4.5); ctx.lineTo(-5, -4.5);
+    ctx.closePath();
+    ctx.fillStyle = "#ff7a86"; ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ---------------------------------------------------------------- game step */
+
+function update(dt) {
+  world.time += dt;
+  const p = world.player;
+
+  // ---- player intent ----
+  if (p && !p.dead) {
+    let steer = 0;
+    if (keys.has("a") || keys.has("arrowleft")) steer -= 1;
+    if (keys.has("d") || keys.has("arrowright")) steer += 1;
+    if (steer === 0) {
+      // steer toward the pointer when the keys are idle
+      const wx = cam.x + (mouse.x - W / 2) / cam.zoom;
+      const wy = cam.y + (mouse.y - H / 2) / cam.zoom;
+      const want = Math.atan2(wy - p.y, wx - p.x);
+      const diff = angleDiff(p.angle, want);
+      if (Math.abs(diff) > 0.06) steer = clamp(diff * 1.9, -1, 1);
+    }
+    p.steer = steer;
+    p.thrust = (keys.has("w") || keys.has("arrowup") || mouse.down) ? 1 : 0;
+    if (keys.has("s") || keys.has("arrowdown")) p.thrust = -0.5;
+  }
+
+  // ---- creatures ----
+  for (const c of world.creatures) {
+    if (c.faction !== "player" && c.ai) runAI(c, dt);
+    c.step(dt);
+  }
+
+  // ---- collisions ----
+  for (let i = 0; i < world.creatures.length; i++) {
+    for (let j = i + 1; j < world.creatures.length; j++) {
+      collidePair(world.creatures[i], world.creatures[j], dt);
+    }
+  }
+
+  // ---- eating ----
+  if (p && !p.dead) {
+    for (let i = world.food.length - 1; i >= 0; i--) {
+      const f = world.food[i];
+      if (Math.hypot(f.x - p.x, f.y - p.y) > p.radius + f.r) continue;
+      let hit = false;
+      for (const c of p.cells) {
+        if (Math.hypot(f.x - c.wx, f.y - c.wy) < CELL_R + f.r) { hit = true; break; }
+      }
+      if (hit) {
+        world.food.splice(i, 1);
+        gainNutrients(FOOD_VALUE);
+        spark(f.x, f.y, "#78f0be", 6);
+      }
+    }
+  }
+
+  // ---- deaths ----
+  for (const c of world.creatures) {
+    if (!c.dead && (!c.cells.length || !c.cells.some(x => x.type === "heart"))) c.dead = true;
+    if (c.dead && !c._shed) {
+      c._shed = true;
+      shedCells(c, c.cells);
+      spark(c.x, c.y, "#ffd0d8", 16);
+      if (c !== p) {
+        // dropping a corpse's worth of food is the reward for the kill
+        for (let i = 0; i < 3 + Math.floor(c.cells.length / 4); i++) {
+          world.food.push({ x: c.x + rand(-30, 30), y: c.y + rand(-30, 30), vx: rand(-25, 25), vy: rand(-25, 25), ph: Math.random() * TAU, r: rand(4, 6) });
+        }
+      }
+    }
+  }
+  world.creatures = world.creatures.filter(c => !c.dead || c === p);
+
+  if (p && p.dead && world.deathTimer === 0) {
+    world.deathTimer = 1;
+    world.nutrients = Math.floor(world.nutrients * 0.75);
+    world.cap = capForNutrients(world.nutrients);
+    saveDesign();
+    if (editorOpen) toggleEditor();
+    el("dead").style.display = "flex";
+  }
+
+  for (const f of world.food) { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.995; f.vy *= 0.995; }
+
+  for (let i = world.debris.length - 1; i >= 0; i--) {
+    const d = world.debris[i];
+    d.life -= dt;
+    d.x += d.vx * dt; d.y += d.vy * dt; d.a += d.av * dt;
+    d.vx *= 0.97; d.vy *= 0.97; d.av *= 0.98;
+    if (d.life <= 0) world.debris.splice(i, 1);
+  }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const q = particles[i];
+    q.life -= dt;
+    q.x += q.vx * dt; q.y += q.vy * dt;
+    q.vx *= 0.94; q.vy *= 0.94;
+    if (q.life <= 0) particles.splice(i, 1);
+  }
+}
+
+/** Spawning, culling, camera — once per frame, not once per physics substep. */
+function housekeeping(dt) {
+  const p = world.player;
+  const ox = p ? p.x : cam.x, oy = p ? p.y : cam.y;
+
+  world.creatures = world.creatures.filter(c =>
+    c === p || Math.hypot(c.x - ox, c.y - oy) < DESPAWN_DIST);
+  world.food = world.food.filter(f => Math.hypot(f.x - ox, f.y - oy) < FOOD_DIST);
+  world.debris = world.debris.filter(d => Math.hypot(d.x - ox, d.y - oy) < DESPAWN_DIST);
+
+  const wantCreatures = Math.round(9 + threatLevel() * 2);
+  if (world.creatures.length < wantCreatures) spawnCreature();
+  if (world.food.length < FOOD_TARGET) spawnFoodPatch(false);
+
+  world.saveTimer -= dt;
+  if (world.saveTimer <= 0) { world.saveTimer = 6; saveDesign(); }
+
+  if (p) {
+    const lead = p.dead ? 0 : 0.35;
+    const tx = p.x + p.vx * lead, ty = p.y + p.vy * lead;
+    cam.x = lerp(cam.x, tx, 1 - Math.exp(-6 * dt));
+    cam.y = lerp(cam.y, ty, 1 - Math.exp(-6 * dt));
+    const want = clamp(150 / Math.max(p.radius, 60), 0.62, 1.25);
+    cam.zoom = lerp(cam.zoom, want, 1 - Math.exp(-2.5 * dt));
+    shake = Math.max(0, shake - dt * 2.6);
+  }
+}
+
+/* -------------------------------------------------------------------- HUD */
+
+const el = id => document.getElementById(id);
+
+function updateHUD() {
+  const p = world.player;
+  const cost = designCost(design);
+  el("h-hearts").textContent = p && !p.dead ? p.counts.heart : 0;
+  el("h-cells").textContent = p && !p.dead ? p.cells.length : 0;
+  el("h-speed").textContent = p && !p.dead ? Math.round(Math.hypot(p.vx, p.vy)) : 0;
+  el("h-nutri").textContent = world.nutrients;
+  el("h-bio").textContent = cost + " / " + world.cap;
+  const bar = el("bio-bar");
+  bar.style.width = clamp(cost / world.cap * 100, 0, 100) + "%";
+  bar.classList.toggle("over", cost > world.cap);
+}
+
+/* ------------------------------------------------------------------ editor */
+
+let editorOpen = false;
+let selectedType = "normal";
+let symmetry = true;
+let editDesign = null;
+const edCanvas = el("edit-canvas");
+const edCtx = edCanvas.getContext("2d");
+const edMouse = { hover: null, inside: false };
+
+function buildPalette() {
+  const host = el("cellbtns");
+  host.innerHTML = "";
+  for (const t of CELL_ORDER) {
+    const d = CELLS[t];
+    const b = document.createElement("button");
+    b.className = "cellbtn" + (t === selectedType ? " sel" : "");
+    b.dataset.type = t;
+    b.innerHTML =
+      '<span class="sw" style="background:' + d.color + ';border:1px solid ' + d.edge + '"></span>' +
+      '<span><span class="nm">' + d.name + '</span><br><span class="ds">' + d.desc + '</span></span>' +
+      '<span class="cost">' + d.cost + '</span>';
+    b.onclick = () => { selectedType = t; buildPalette(); };
+    host.appendChild(b);
+  }
+}
+
+function toggleEditor() {
+  if (splash.style.display !== "none") return;
+  editorOpen = !editorOpen;
+  el("editor").classList.toggle("open", editorOpen);
+  const deadCard = el("dead");
+  if (editorOpen) {
+    // you can rethink the body while dissolved — hide the death card underneath
+    wasDeadOverlay = deadCard.style.display === "flex";
+    if (wasDeadOverlay) deadCard.style.display = "none";
+    editDesign = design.map(c => ({ ...c }));
+    refreshEditorStats();
+  } else {
+    applyDesign();
+    if (wasDeadOverlay && world.player && world.player.dead) deadCard.style.display = "flex";
+    wasDeadOverlay = false;
+  }
+}
+let wasDeadOverlay = false;
+
+/** Preview stats for the design on the bench. */
+function editorStats(d) {
+  const s = swimStats(d);
+  let hp = 0;
+  for (const c of d) hp += CELLS[c.type].hp;
+  return { n: s.n, mass: s.mass, topSpeed: s.topSpeed, turn: s.turnRate, hp, cost: designCost(d) };
+}
+
+function refreshEditorStats() {
+  const d = editDesign || design;
+  const s = editorStats(d);
+  el("s-bio").textContent = s.cost + " / " + world.cap;
+  const fill = el("ed-bio").firstElementChild;
+  fill.style.width = clamp(s.cost / world.cap * 100, 0, 100) + "%";
+  fill.classList.toggle("over", s.cost > world.cap);
+  el("s-mass").textContent = s.mass.toFixed(1);
+  el("s-speed").textContent = Math.round(s.topSpeed);
+  el("s-turn").textContent = s.turn.toFixed(1) + " r/s";
+  el("s-tough").textContent = s.hp;
+
+  const muscle = swimStats(d).muscle;
+  el("s-muscle").textContent = Math.round(muscle * 100) + "%";
+
+  const warns = [];
+  if (s.n.heart === 0) warns.push("No heart cell — you cannot live like this.");
+  if (s.n.flagellum === 0) warns.push("No flagellum — you cannot move.");
+  else if (muscle < 0.25) warns.push("Too little muscle for this much body — you'll be sluggish prey.");
+  if (s.cost > world.cap) warns.push("Over the biomass limit. Eat more, or cut cells.");
+  el("s-warn").textContent = warns.join(" ");
+  el("btn-sym").textContent = "Symmetry: " + (symmetry ? "ON" : "OFF");
+  el("btn-sym").classList.toggle("on", symmetry);
+}
+
+function edWorldFromScreen(mx, my) {
+  return { x: (mx - W / 2) / EDIT_ZOOM, y: (my - H / 2) / EDIT_ZOOM };
+}
+const EDIT_ZOOM = 1.5;
+
+function editorPlace(remove) {
+  const h = edMouse.hover;
+  if (!h) return;
+  const targets = [h];
+  if (symmetry) {
+    const m = mirrorAxial(h.q, h.r);
+    if (m.q !== h.q || m.r !== h.r) targets.push(m);
+  }
+
+  if (remove) {
+    for (const t of targets) {
+      const i = editDesign.findIndex(c => c.q === t.q && c.r === t.r);
+      if (i < 0) continue;
+      // you always need somewhere to keep a heartbeat
+      if (editDesign[i].type === "heart" && designCounts(editDesign).heart <= 1) continue;
+      editDesign.splice(i, 1);
+    }
+    // never leave floating chunks behind
+    if (editDesign.length) {
+      const keep = connectedSet(editDesign);
+      editDesign = editDesign.filter(c => keep.has(key(c.q, c.r)));
+    }
+    refreshEditorStats();
+    return;
+  }
+
+  // A mirrored pair is placed atomically: half a symmetric pair is worse than
+  // nothing, so if the pair doesn't fit the biomass budget, neither cell lands.
+  const trial = editDesign.map(c => ({ ...c }));
+  for (const t of targets) {
+    const existing = trial.find(c => c.q === t.q && c.r === t.r);
+    if (existing) { existing.type = selectedType; continue; }
+    if (trial.length && !HEX_DIRS.some(([dq, dr]) =>
+      trial.some(c => c.q === t.q + dq && c.r === t.r + dr))) continue;
+    trial.push({ q: t.q, r: t.r, type: selectedType });
+  }
+  if (designCost(trial) > world.cap) return;
+  editDesign = trial;
+  refreshEditorStats();
+}
+
+function applyDesign() {
+  if (!editDesign) return;
+  if (!editDesign.some(c => c.type === "heart")) { editDesign = null; return; }
+  design = editDesign.map(c => ({ ...c }));
+  editDesign = null;
+  saveDesign();
+  const p = world.player;
+  if (p && !p.dead) {
+    const nx = p.x, ny = p.y, na = p.angle, nvx = p.vx, nvy = p.vy;
+    const i = world.creatures.indexOf(p);
+    const np = new Creature(design, nx, ny, na, "player");
+    np.vx = nvx; np.vy = nvy;
+    np.shield = Math.max(p.shield, 0.9);
+    world.player = np;
+    if (i >= 0) world.creatures[i] = np; else world.creatures.push(np);
+    spark(nx, ny, "#8fd6a8", 14);
+  }
+}
+
+function renderEditor() {
+  const c = edCtx;
+  c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  c.clearRect(0, 0, W, H);
+  c.save();
+  c.translate(W / 2, H / 2);
+  c.scale(EDIT_ZOOM, EDIT_ZOOM);
+
+  const d = editDesign || design;
+  const occupied = new Map(d.map(x => [key(x.q, x.r), x]));
+
+  // buildable grid
+  const slots = hexDisc(7);
+  for (const s of slots) {
+    if (occupied.has(key(s.q, s.r))) continue;
+    const adjacent = HEX_DIRS.some(([dq, dr]) => occupied.has(key(s.q + dq, s.r + dr)));
+    const p = axialToPixel(s.q, s.r);
+    hexPath(c, p.x, p.y, 0, HEX * 0.92);
+    c.strokeStyle = adjacent ? "rgba(140,225,255,.3)" : "rgba(140,225,255,.09)";
+    c.lineWidth = 1; c.stroke();
+  }
+
+  // symmetry axis
+  if (symmetry) {
+    c.beginPath();
+    c.moveTo(-HEX * 18, 0); c.lineTo(HEX * 18, 0);
+    c.strokeStyle = "rgba(140,225,255,.22)";
+    c.setLineDash([5, 6]); c.lineWidth = 1; c.stroke(); c.setLineDash([]);
+  }
+
+  // forward arrow
+  c.save();
+  c.globalAlpha = .55;
+  c.translate(HEX * 14, 0);
+  c.beginPath(); c.moveTo(12, 0); c.lineTo(-6, 7); c.lineTo(-6, -7); c.closePath();
+  c.fillStyle = "#7fd8f0"; c.fill();
+  c.font = "9px ui-monospace, monospace"; c.fillStyle = "#7fd8f0";
+  c.fillText("FRONT", -18, -14);
+  c.restore();
+
+  // the creature itself
+  const tmp = new Creature(d.some(x => x.type === "heart") ? d : d.concat([{ q: 0, r: 0, type: "heart" }]), 0, 0, 0, "preview");
+  for (const cell of tmp.cells) {
+    const p = axialToPixel(cell.q, cell.r);
+    drawCell(c, cell, p.x, p.y, 0, cell.ox, cell.oy, world.time * 4);
+  }
+
+  // hover ghosts
+  if (edMouse.hover && edMouse.inside) {
+    const ghosts = [edMouse.hover];
+    if (symmetry) {
+      const m = mirrorAxial(edMouse.hover.q, edMouse.hover.r);
+      if (m.q !== edMouse.hover.q || m.r !== edMouse.hover.r) ghosts.push(m);
+    }
+    // price the whole mirrored pair, matching how editorPlace commits it
+    let pairCost = designCost(d);
+    for (const g of ghosts) {
+      const o = occupied.get(key(g.q, g.r));
+      pairCost += CELLS[selectedType].cost - (o ? CELLS[o.type].cost : 0);
+    }
+    const affordable = pairCost <= world.cap;
+    for (const g of ghosts) {
+      const p = axialToPixel(g.q, g.r);
+      const canPlace = occupied.has(key(g.q, g.r)) ||
+        (!d.length || HEX_DIRS.some(([dq, dr]) => occupied.has(key(g.q + dq, g.r + dr))));
+      hexPath(c, p.x, p.y, 0, HEX * 0.92);
+      c.fillStyle = (canPlace && affordable) ? CELLS[selectedType].color + "66" : "rgba(232,69,95,.28)";
+      c.fill();
+      c.strokeStyle = (canPlace && affordable) ? "#ffffff88" : "#e8455f88";
+      c.lineWidth = 1.4; c.stroke();
+    }
+  }
+  c.restore();
+}
+
+edCanvas.addEventListener("mousemove", e => {
+  edMouse.inside = true;
+  const w = edWorldFromScreen(e.clientX, e.clientY);
+  const a = pixelToAxial(w.x, w.y);
+  edMouse.hover = (Math.abs(a.q) + Math.abs(a.r) + Math.abs(a.q + a.r)) / 2 <= 7 ? a : null;
+});
+edCanvas.addEventListener("mouseleave", () => { edMouse.inside = false; });
+edCanvas.addEventListener("mousedown", e => {
+  e.preventDefault();
+  editorPlace(e.button === 2);
+});
+edCanvas.addEventListener("contextmenu", e => e.preventDefault());
+
+el("btn-sym").onclick = () => { symmetry = !symmetry; refreshEditorStats(); };
+el("btn-clear").onclick = () => { editDesign = starterDesign(); refreshEditorStats(); };
+el("btn-apply").onclick = () => toggleEditor();
+
+/* ------------------------------------------------------------- start / die */
+
+const splash = el("splash");
+
+function startGame() {
+  splash.style.display = "none";
+  try {
+    const n = parseInt(localStorage.getItem("cellsea.nutrients") || "0", 10);
+    if (!Number.isNaN(n) && n > 0) { world.nutrients = n; world.cap = capForNutrients(n); }
+  } catch (e) { /* ignore */ }
+  spawnPlayer();
+  seedWorld();
+  cam.x = 0; cam.y = 0;
+  world.running = true;
+}
+
+function respawn() {
+  el("dead").style.display = "none";
+  const old = world.player;
+  if (old) {
+    const i = world.creatures.indexOf(old);
+    if (i >= 0) world.creatures.splice(i, 1);
+  }
+  world.deathTimer = 0;
+  // find somewhere without a hostile sitting on top of it
+  let x = cam.x, y = cam.y, best = -1;
+  for (let i = 0; i < 24; i++) {
+    const a = Math.random() * TAU, d = rand(400, 900);
+    const tx = cam.x + Math.cos(a) * d, ty = cam.y + Math.sin(a) * d;
+    let nearest = Infinity;
+    for (const c of world.creatures) {
+      if (c.faction !== "hostile") continue;
+      nearest = Math.min(nearest, Math.hypot(c.x - tx, c.y - ty));
+    }
+    if (nearest > best) { best = nearest; x = tx; y = ty; }
+    if (best > 700) break;
+  }
+  const p = new Creature(design, x, y, Math.random() * TAU, "player");
+  p.shield = SPAWN_SHIELD;
+  world.player = p;
+  world.creatures.push(p);
+  cam.x = x; cam.y = y;
+  shake = 0;
+  saveDesign();
+}
+
+el("btn-start").onclick = startGame;
+el("btn-respawn").onclick = respawn;
+
+/* --------------------------------------------------------------- main loop */
+
+let last = performance.now();
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  dt = Math.min(dt, 1 / 20);           // never let a tab-out teleport anyone
+
+  if (world.running && !editorOpen) {
+    // fixed sub-steps keep the collisions stable at any framerate
+    const steps = Math.max(1, Math.ceil(dt / (1 / 90)));
+    const sdt = dt / steps;
+    for (let i = 0; i < steps; i++) update(sdt);
+    housekeeping(dt);
+  } else {
+    world.time += dt;
+  }
+
+  render();
+  if (editorOpen) renderEditor();
+  updateHUD();
+  requestAnimationFrame(frame);
+}
+
+resize();
+buildPalette();
+refreshEditorStats();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
