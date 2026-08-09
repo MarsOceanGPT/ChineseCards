@@ -55,7 +55,12 @@
   #editor { inset: 0; position: absolute; display: none; z-index: 5; background: rgba(3, 12, 18, .72); backdrop-filter: blur(3px); }
   #editor.open { display: block; }
   #edit-canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
-  #palette { top: 50%; left: 14px; transform: translateY(-50%); padding: 12px; width: 232px; font-size: 12px; }
+  /* full-height column: the cell list scrolls, the tools stay reachable */
+  #palette {
+    top: 14px; bottom: 14px; left: 14px; width: 232px; padding: 12px; font-size: 12px;
+    display: flex; flex-direction: column;
+  }
+  #cellbtns { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
   #palette h2 { margin: 0 0 4px; font-size: 13px; letter-spacing: .09em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
   #palette .sub { color: var(--dim); font-size: 10.5px; line-height: 1.5; margin-bottom: 10px; }
   .cellbtn {
@@ -70,7 +75,7 @@
   .cellbtn .nm { font-weight: 600; }
   .cellbtn .ds { color: var(--dim); font-size: 10px; line-height: 1.4; }
   .cellbtn .cost { margin-left: auto; color: var(--dim); font-size: 10px; white-space: nowrap; }
-  #palette .tools { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 9px; }
+  #palette .tools { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 9px; flex: 0 0 auto; }
   .tbtn {
     display: block; width: 100%; margin-bottom: 5px; padding: 7px; border-radius: 7px; cursor: pointer;
     background: rgba(255,255,255,.05); border: 1px solid var(--line); color: var(--text); font: inherit; font-size: 11.5px;
@@ -104,15 +109,20 @@
   .big:hover { background: rgba(67,201,160,.32); }
   #dead h1 { color: var(--heart); }
 
-  /* ---------- Bench button (the only way in without a keyboard) ---------- */
-  #btn-bench {
-    position: absolute; z-index: 4; cursor: pointer; font: inherit; display: none;
+  /* ---------- Top-right controls (the only way in without a keyboard) ------ */
+  #topright {
+    position: absolute; z-index: 4; display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
     top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
+  }
+  #topright button {
+    cursor: pointer; font: inherit; display: none;
     padding: 10px 15px; border-radius: 10px; font-size: 12px; font-weight: 600; letter-spacing: .07em;
     background: var(--panel); border: 1px solid var(--line); color: var(--text);
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px); white-space: nowrap;
   }
   #btn-bench:hover { border-color: #57c8e8; }
+  #btn-detach { border-color: rgba(224,163,74,.55); color: #f2c986; }
+  #btn-detach:hover { border-color: #e0a34a; }
 
   /* ---------- Phones ---------- */
   @media (max-width: 720px), (pointer: coarse) and (max-width: 900px) {
@@ -126,10 +136,11 @@
 
     /* palette becomes a bottom sheet: a scrolling row of cell chips + tools */
     #palette {
-      top: auto; left: 0; right: 0; transform: none; width: auto; border-radius: 14px 14px 0 0;
+      top: auto; left: 0; right: 0; width: auto; border-radius: 14px 14px 0 0;
       bottom: 0; padding: 9px 10px calc(9px + env(safe-area-inset-bottom));
       border-left: none; border-right: none; border-bottom: none;
     }
+    #cellbtns { overflow-y: visible; flex: 0 0 auto; }
     #palette h2, #palette .sub { display: none; }
     #cellbtns { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 3px; -webkit-overflow-scrolling: touch; }
     .cellbtn {
@@ -150,7 +161,8 @@
     }
     #stats #ed-bio { grid-column: 1 / -1; }
     #stats .warn { grid-column: 1 / -1; margin-top: 4px; }
-    #btn-bench { padding: 9px 13px; font-size: 11px; }
+    #topright { top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); gap: 6px; }
+    #topright button { padding: 9px 13px; font-size: 11px; }
 
     .card { padding: 20px 18px; }
     .card h1 { font-size: 21px; }
@@ -175,7 +187,10 @@
   <b>W</b> / <b>click</b> thrust &nbsp;·&nbsp; <b>A</b> <b>D</b> turn &nbsp;·&nbsp; mouse steers &nbsp;·&nbsp; <b>E</b> editor
 </div>
 
-<button id="btn-bench">BENCH</button>
+<div id="topright">
+  <button id="btn-bench">BENCH</button>
+  <button id="btn-detach">DETACH <span id="detach-n"></span></button>
+</div>
 
 <div id="editor">
   <canvas id="edit-canvas"></canvas>
@@ -197,6 +212,7 @@
     <div id="ed-bio"><div></div></div>
     <div class="row" style="margin-top:8px"><span class="k">mass</span><span id="s-mass">0</span></div>
     <div class="row"><span class="k">muscle</span><span id="s-muscle">0%</span></div>
+    <div class="row"><span class="k">tails</span><span id="s-tails">0 / 0</span></div>
     <div class="row"><span class="k">top speed</span><span id="s-speed">0</span></div>
     <div class="row"><span class="k">turn rate</span><span id="s-turn">0</span></div>
     <div class="row"><span class="k">toughness</span><span id="s-tough">0</span></div>
@@ -214,7 +230,12 @@
        <span>Normal cells</span> are your muscle; strip them and you crawl.
        <span>Armour</span> is tough but heavy.
        <span>Spikes</span> shear off whatever cell they touch, and clack harmlessly off other spikes.
-       <span>Flagella</span> push away from themselves — mount them at the back to go forward.</p>
+       <span>Flagella</span> push away from themselves — mount them at the back to go forward,
+       and keep open water behind them, because a buried tail pushes nothing.</p>
+    <p>Three more are worth the biomass. An <span>angry neuron</span> is dead weight until a
+       <span>detach</span> seam cuts its piece loose — then that piece hunts on its own and will
+       never turn on you. An <span>exploding cell</span> bursts when anything living touches it.
+       Put all three in one pod and you have built a suicide drone.</p>
     <p id="how-desktop"><span>W or click</span> to beat your flagella · <span>A / D</span> or the mouse
        to turn · <span>E</span> or the BENCH button opens the bench anywhere, any time.</p>
     <p id="how-touch" style="display:none"><span>Touch and hold</span> anywhere to swim toward your
@@ -295,10 +316,29 @@ const CELLS = {
   flagellum: {
     name: "Flagellum", color: "#8fd6a8", edge: "#3f7a58",
     cost: 6,  mass: 0.8, hp: 1,
-    desc: "Pushes away from itself. Back = forward."
+    desc: "Pushes away from itself. Back = forward. Cover it and it stops."
+  },
+  neuron: {
+    name: "Angry neuron", color: "#8c1c30", edge: "#490d19",
+    cost: 9,  mass: 1.2, hp: 2,
+    desc: "Dead weight while attached. Detach it and the piece hunts."
+  },
+  detach: {
+    name: "Detach", color: "#e0a34a", edge: "#875c1c",
+    cost: 4,  mass: 0.6, hp: 1,
+    desc: "A seam. The DETACH button burns it and frees what it held."
+  },
+  bomb: {
+    name: "Exploding", color: "#ff7a3d", edge: "#8f3a12",
+    cost: 8,  mass: 1.3, hp: 1,
+    desc: "Bursts when anything living touches it, or when it dies."
   },
 };
-const CELL_ORDER = ["heart", "normal", "armor", "spike", "flagellum"];
+const CELL_ORDER = ["heart", "normal", "armor", "spike", "flagellum", "neuron", "detach", "bomb"];
+
+const BLAST_R = HEX * 3.8;      // exploding cell radius
+const DRONE_LIFE = 30;          // seconds a detached hunting piece survives
+const DRONE_RAGE = 2.4;         // how much harder a woken neuron drives its pod
 
 /* -------------------------------------------------------------- small maths */
 
@@ -358,9 +398,81 @@ function designCost(design) {
 }
 
 function designCounts(design) {
-  const n = { heart: 0, normal: 0, armor: 0, spike: 0, flagellum: 0 };
-  for (const c of design) n[c.type]++;
+  const n = {};
+  for (const t of CELL_ORDER) n[t] = 0;
+  for (const c of design) if (n[c.type] !== undefined) n[c.type]++;
   return n;
+}
+
+/**
+ * Geometry every consumer needs from a bag of cells: where each one sits, the
+ * outward normal a spike or tail points along, and whether a tail is smothered.
+ *
+ * A flagellum needs open water behind it. Sampling along its length against the
+ * creature's own cells is what stops the armoured-turtle build — wrap yourself
+ * completely and every tail is buried, so the shell cannot move.
+ */
+function layoutCells(cells) {
+  const occupied = new Set(cells.map(c => key(c.q, c.r)));
+  const pos = cells.map(c => axialToPixel(c.q, c.r));
+
+  let mx = 0, my = 0;
+  for (const p of pos) { mx += p.x; my += p.y; }
+  mx /= (pos.length || 1); my /= (pos.length || 1);
+
+  const out = cells.map((c, i) => {
+    let ox = 0, oy = 0;
+    for (const [dq, dr] of HEX_DIRS) {
+      if (occupied.has(key(c.q + dq, c.r + dr))) continue;
+      const d = axialToPixel(dq, dr);
+      const len = Math.hypot(d.x, d.y);
+      ox += d.x / len; oy += d.y / len;
+    }
+    const ol = Math.hypot(ox, oy);
+    if (ol > 1e-4) return { x: ox / ol, y: oy / ol };
+    // fully walled in: fall back to pointing away from the middle of the body
+    const dx = pos[i].x - mx, dy = pos[i].y - my;
+    const dl = Math.hypot(dx, dy);
+    return dl > 1e-4 ? { x: dx / dl, y: dy / dl } : { x: 1, y: 0 };
+  });
+
+  // Walk out along the tail and ask which hex each step lands in. Testing
+  // occupancy is exact; measuring distance to cell centres is not, because a
+  // diagonal ray slips through the gaps between neighbouring hex centres.
+  const blocked = cells.map((c, i) => {
+    if (c.type !== "flagellum") return false;
+    for (const mult of [1.2, 1.7, 2.2, 2.7]) {
+      const a = pixelToAxial(pos[i].x + out[i].x * HEX * mult,
+                             pos[i].y + out[i].y * HEX * mult);
+      if (a.q === c.q && a.r === c.r) continue;      // still its own hex
+      if (occupied.has(key(a.q, a.r))) return true;
+    }
+    return false;
+  });
+
+  return { pos, out, blocked };
+}
+
+/** Connected components of a cell list, by hex adjacency. */
+function componentsOf(cells) {
+  const map = new Map(cells.map(c => [key(c.q, c.r), c]));
+  const seen = new Set();
+  const groups = [];
+  for (const start of cells) {
+    if (seen.has(key(start.q, start.r))) continue;
+    seen.add(key(start.q, start.r));
+    const group = [], stack = [start];
+    while (stack.length) {
+      const c = stack.pop();
+      group.push(c);
+      for (const [dq, dr] of HEX_DIRS) {
+        const k = key(c.q + dq, c.r + dr);
+        if (map.has(k) && !seen.has(k)) { seen.add(k); stack.push(map.get(k)); }
+      }
+    }
+    groups.push(group);
+  }
+  return groups;
 }
 
 /**
@@ -374,18 +486,25 @@ function designCounts(design) {
  * for being in the water, so shedding mass alone never buys you speed.
  * Terminal velocity works out to force / (mass + HULL_DRAG).
  */
-function swimStats(cells, mass) {
+function swimStats(cells, mass, layout) {
+  const L = layout || layoutCells(cells);
   const n = designCounts(cells);
   let normalMass = 0;
   for (const c of cells) if (c.type === "normal") normalMass += CELLS.normal.mass;
   const m = mass !== undefined ? mass : cells.reduce((s, c) => s + CELLS[c.type].mass, 0);
   const muscle = m > 0 ? normalMass / m : 0;
   const speedFactor = 0.35 + 0.9 * muscle;
-  const force = n.flagellum * FLAG_POWER * speedFactor;
-  const turnPower = (0.4 + 0.8 * n.flagellum) * (0.5 + 0.7 * muscle);
+  // a buried tail still costs mass and biomass, it just does not push
+  let working = 0;
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i].type === "flagellum" && !L.blocked[i]) working++;
+  }
+  const force = working * FLAG_POWER * speedFactor;
+  const turnPower = (0.4 + 0.8 * working) * (0.5 + 0.7 * muscle);
   const linDamp = m > 0 ? LIN_DAMP * (m + HULL_DRAG) / m : LIN_DAMP;
   return {
     n, mass: m, muscle, speedFactor, force, turnPower, linDamp,
+    working, buried: n.flagellum - working,
     topSpeed: m > 0 ? force / (m + HULL_DRAG) : 0,
     turnRate: m > 0 ? turnPower * TURN_K / (m + HULL_DRAG) / ANG_DAMP : 0,
   };
@@ -435,6 +554,9 @@ class Creature {
     this.flagPhase = Math.random() * TAU;
     this.shield = 0;
     this.ai = null;
+    this.isDrone = false;
+    this.team = null;               // set on drones: whose side they fight for
+    this.life = Infinity;
     this.cells = design.map(c => ({
       q: c.q, r: c.r, type: c.type,
       hp: CELLS[c.type].hp, maxHp: CELLS[c.type].hp,
@@ -448,38 +570,26 @@ class Creature {
   /** Recompute centroid-relative layout, mass, inertia, outward normals. */
   rebuild() {
     const cells = this.cells;
+    const L = layoutCells(cells);
+
     let m = 0, cx = 0, cy = 0;
-    for (const c of cells) {
-      const p = axialToPixel(c.q, c.r);
-      const cm = CELLS[c.type].mass;
-      c._px = p.x; c._py = p.y;
-      m += cm; cx += p.x * cm; cy += p.y * cm;
+    for (let i = 0; i < cells.length; i++) {
+      const cm = CELLS[cells[i].type].mass;
+      cells[i]._px = L.pos[i].x; cells[i]._py = L.pos[i].y;
+      m += cm; cx += L.pos[i].x * cm; cy += L.pos[i].y * cm;
     }
     this.mass = Math.max(m, 0.001);
     cx /= this.mass; cy /= this.mass;
     this.cx = cx; this.cy = cy;
 
-    const occupied = new Set(cells.map(c => key(c.q, c.r)));
     let I = 0, radius = 0;
-    for (const c of cells) {
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i];
       c.lx = c._px - cx; c.ly = c._py - cy;
+      c.ox = L.out[i].x; c.oy = L.out[i].y;
+      c.blocked = L.blocked[i];
       I += CELLS[c.type].mass * (c.lx * c.lx + c.ly * c.ly);
       radius = Math.max(radius, Math.hypot(c.lx, c.ly));
-
-      // outward normal = mean direction of the empty neighbour slots
-      let ox = 0, oy = 0;
-      for (const [dq, dr] of HEX_DIRS) {
-        if (occupied.has(key(c.q + dq, c.r + dr))) continue;
-        const d = axialToPixel(dq, dr);
-        const len = Math.hypot(d.x, d.y);
-        ox += d.x / len; oy += d.y / len;
-      }
-      const ol = Math.hypot(ox, oy);
-      if (ol > 1e-4) { c.ox = ox / ol; c.oy = oy / ol; }
-      else {
-        const dl = Math.hypot(c.lx, c.ly);
-        if (dl > 1e-4) { c.ox = c.lx / dl; c.oy = c.ly / dl; } else { c.ox = 1; c.oy = 0; }
-      }
     }
     this.inertia = Math.max(I, 40);
     this.radius = radius + CELL_R + SPIKE_REACH;
@@ -487,11 +597,16 @@ class Creature {
     const n = designCounts(cells);
     this.counts = n;
     this.hearts = n.heart;
-    const perf = swimStats(cells, this.mass);
+    const perf = swimStats(cells, this.mass, L);
+    this.working = perf.working;
     this.speedFactor = perf.speedFactor;
-    this.thrustForce = perf.force;
-    this.turnPower = perf.turnPower;
-    this.maxSpeed = perf.topSpeed;
+    // A severed pod carries no flesh, so by the ordinary muscle rule it would
+    // crawl and never catch anything. The neuron drives it far harder than a
+    // calm body would — that is the whole point of an angry one.
+    const rage = this.isDrone ? DRONE_RAGE : 1;
+    this.thrustForce = perf.force * rage;
+    this.turnPower = perf.turnPower * (this.isDrone ? 1.6 : 1);
+    this.maxSpeed = perf.topSpeed * rage;
     this.linDamp = perf.linDamp;
     this.dragMass = this.mass + HULL_DRAG;
   }
@@ -519,10 +634,10 @@ class Creature {
   step(dt) {
     if (this.shield > 0) this.shield -= dt;
     // flagella push along -outward, so a tail at the back drives you forward
-    if (this.thrust !== 0 && this.counts.flagellum > 0) {
-      const per = this.thrustForce / this.counts.flagellum * this.thrust;
+    if (this.thrust !== 0 && this.working > 0) {
+      const per = this.thrustForce / this.working * this.thrust;
       for (const c of this.cells) {
-        if (c.type !== "flagellum") continue;
+        if (c.type !== "flagellum" || c.blocked) continue;
         const d = this.worldDir(-c.ox, -c.oy);
         this.vx += d.x * per / this.mass * dt;
         this.vy += d.y * per / this.mass * dt;
@@ -565,11 +680,21 @@ class Creature {
     cell.flash = 1;
     if (cell.hp > 0) return [];
 
+    // a dying exploding cell goes off, however it died
+    if (cell.type === "bomb" && !cell.spent) {
+      cell.spent = true;
+      pendingBlasts.push({ x: cell.wx, y: cell.wy, owner: this });
+    }
+
     const lost = [cell];
     this.cells = this.cells.filter(c => c !== cell);
     if (this.cells.length === 0) { this.dead = true; return lost; }
 
-    if (!this.cells.some(c => c.type === "heart")) { this.dead = true; return lost.concat(this.cells); }
+    // drones have no heart by definition; they run on borrowed time instead
+    if (!this.isDrone && !this.cells.some(c => c.type === "heart")) {
+      this.dead = true;
+      return lost.concat(this.cells);
+    }
 
     // anything no longer joined to a heart drifts away
     const keep = connectedSet(this.cells);
@@ -609,9 +734,11 @@ function bpSwimmer() {
 function bpHunter() {
   const d = [{ q: 0, r: 0, type: "heart" }];
   for (const h of hexRing(1)) d.push({ ...h, type: "armor" });
+  // rear tails live on ring 3 only — stacking them behind ring 2 would bury
+  // the inner ones against the hull and the hunter would barely move
   for (const h of hexRing(2)) {
     const p = axialToPixel(h.q, h.r);
-    d.push({ ...h, type: p.x > 4 ? "spike" : (p.x < -8 ? "flagellum" : "armor") });
+    d.push({ ...h, type: p.x > 4 ? "spike" : (p.x < -8 ? "normal" : "armor") });
   }
   for (const h of hexRing(3)) {
     const p = axialToPixel(h.q, h.r);
@@ -670,7 +797,8 @@ function loadDesign() {
     const raw = localStorage.getItem("cellsea.design");
     if (raw) {
       const d = JSON.parse(raw);
-      if (Array.isArray(d) && d.length && d.some(c => c.type === "heart")) return d;
+      const clean = Array.isArray(d) ? d.filter(c => c && CELLS[c.type]) : [];
+      if (clean.length && clean.some(c => c.type === "heart")) return clean;
     }
   } catch (e) { /* ignore corrupt saves */ }
   return starterDesign();
@@ -745,6 +873,94 @@ function seedWorld() {
   while (world.food.length < FOOD_TARGET) spawnFoodPatch(true);
 }
 
+/**
+ * Two creatures on the same side. Only drones carry a team, so this changes
+ * nothing between wild creatures — it exists so your own detached hunters
+ * cannot spike you, and your bombs cannot catch you in the blast.
+ */
+/** Yours: the creature you steer, or a hunter you cut loose from it. */
+function isMine(c) { return !!c && (c === world.player || c.team === "player"); }
+
+function friendly(A, B) {
+  if (A === B) return true;
+  if (A.team && B.team) return A.team === B.team;
+  if (A.team) return A.team === B.faction;
+  if (B.team) return B.team === A.faction;
+  return false;
+}
+
+/** Turn a severed piece into an autonomous hunter. */
+function spawnDrone(parent, group) {
+  let m = 0, cx = 0, cy = 0;
+  for (const c of group) {
+    const cm = CELLS[c.type].mass;
+    m += cm; cx += c.wx * cm; cy += c.wy * cm;
+  }
+  cx /= m; cy /= m;
+
+  const drone = new Creature(group.map(c => ({ q: c.q, r: c.r, type: c.type })),
+    cx, cy, parent.angle, "drone");
+  // carry damage across rather than handing out a freshly healed pod
+  const hp = new Map(group.map(c => [key(c.q, c.r), c.hp]));
+  for (const c of drone.cells) {
+    if (hp.has(key(c.q, c.r))) c.hp = hp.get(key(c.q, c.r));
+  }
+  drone.isDrone = true;
+  drone.rebuild();                  // re-price it now that the rage bonus applies
+  for (const c of drone.cells) if (c.type === "neuron") c.awake = true;
+  drone.team = parent.team || parent.faction;
+  drone.life = DRONE_LIFE;
+  drone.ai = makeAI("hunt", parent.angle);
+
+  // inherit the parent's motion at that point, then shove clear of the hull
+  const rx = cx - parent.x, ry = cy - parent.y;
+  const len = Math.hypot(rx, ry) || 1;
+  drone.vx = parent.vx - parent.av * ry + rx / len * 55;
+  drone.vy = parent.vy + parent.av * rx + ry / len * 55;
+  drone.av = parent.av;
+
+  world.creatures.push(drone);
+  spark(cx, cy, CELLS.neuron.color, 14);
+  return drone;
+}
+
+/**
+ * Burn one detach seam. Whatever the seam was holding on comes away: pieces
+ * carrying an angry neuron wake up and hunt, the rest is just debris.
+ */
+function detachAt(creature, cell) {
+  const i = creature.cells.indexOf(cell);
+  if (i < 0) return;
+  spark(cell.wx, cell.wy, CELLS.detach.color, 12);
+  creature.cells.splice(i, 1);
+  if (!creature.cells.length) { creature.dead = true; return; }
+
+  const keep = connectedSet(creature.cells);
+  const orphans = creature.cells.filter(c => !keep.has(key(c.q, c.r)));
+  if (orphans.length) {
+    creature.cells = creature.cells.filter(c => keep.has(key(c.q, c.r)));
+    for (const group of componentsOf(orphans)) {
+      if (group.some(c => c.type === "neuron")) spawnDrone(creature, group);
+      else shedCells(creature, group);
+    }
+  }
+  if (!creature.cells.length) { creature.dead = true; return; }
+  creature.rebuild();
+  creature.syncCells();
+}
+
+/** The outermost seam first, so repeated presses shed pods one at a time. */
+function detachOnce(creature) {
+  let best = null, bestD = -1;
+  for (const c of creature.cells) {
+    if (c.type !== "detach") continue;
+    const d = c.lx * c.lx + c.ly * c.ly;
+    if (d > bestD) { bestD = d; best = c; }
+  }
+  if (best) detachAt(creature, best);
+  return !!best;
+}
+
 function shedCells(creature, cells) {
   for (const c of cells) {
     world.debris.push({
@@ -789,6 +1005,26 @@ function runAI(c, dt) {
         c.vx += Math.cos(want) * 16 * dt;
         c.vy += Math.sin(want) * 16 * dt;
       }
+    }
+    return;
+  }
+
+  // A detached piece with an angry neuron in it. It goes for anything alive
+  // that is not on its own side — never the creature that let it go.
+  if (ai.kind === "hunt") {
+    let best = null, bd = 1400;
+    for (const o of world.creatures) {
+      if (o === c || o.dead || friendly(c, o)) continue;
+      const d = Math.hypot(o.x - c.x, o.y - c.y);
+      if (d < bd) { bd = d; best = o; }
+    }
+    if (best) {
+      c.steer = clamp(angleDiff(c.angle, Math.atan2(best.y - c.y, best.x - c.x)) * 2.6, -1, 1);
+      c.thrust = 1;
+    } else {
+      if (ai.t <= 0) { ai.heading = Math.random() * TAU; ai.t = rand(1, 3); }
+      c.steer = clamp(angleDiff(c.angle, ai.heading) * 1.5, -1, 1);
+      c.thrust = 0.5;
     }
     return;
   }
@@ -857,9 +1093,15 @@ function collidePair(A, B, dt) {
   const rr = A.radius + B.radius;
   if (dx * dx + dy * dy > rr * rr) return;
 
-  // --- spikes: each spike tip shears whatever single cell it is touching ---
-  spikePass(A, B);
-  spikePass(B, A);
+  const allies = friendly(A, B);
+  if (!allies) {
+    // --- spikes: each spike tip shears whatever single cell it is touching ---
+    spikePass(A, B);
+    spikePass(B, A);
+    // --- exploding cells go off on contact with anything living ---
+    bombPass(A, B);
+    bombPass(B, A);
+  }
 
   // --- body: keep the two shapes out of each other ---
   const minD = CELL_R * 2;
@@ -930,7 +1172,7 @@ function spikePass(A, B) {
       if (B === world.player) shake = Math.min(1, shake + (lost.length ? 0.8 : 0.35));
       if (lost.length) {
         shedCells(B, lost);
-        if (A === world.player) gainNutrients(lost.length * 2);
+        if (isMine(A)) gainNutrients(lost.length * 2);
       }
     } else if (clash) {
       s.cd = SPIKE_CD;
@@ -947,6 +1189,60 @@ function spikePass(A, B) {
       spark(tx, ty, "#dfe9ef", 4);
     }
   }
+}
+
+/** A's exploding cells against B's body. Killing the cell is what detonates it. */
+function bombPass(A, B) {
+  if (B.shield > 0) return;
+  const reach = CELL_R * 2 + 2;
+  for (const b of A.cells) {
+    if (b.type !== "bomb" || b.spent) continue;
+    if (Math.hypot(b.wx - B.x, b.wy - B.y) > B.radius + reach) continue;
+    for (const t of B.cells) {
+      if (Math.hypot(b.wx - t.wx, b.wy - t.wy) < reach) {
+        const lost = A.damageCell(b, 99);
+        if (lost.length) shedCells(A, lost);
+        break;
+      }
+    }
+  }
+}
+
+/**
+ * Work through queued detonations. Blasts skip the owner's own side, so a
+ * suicide pod is worth building and a mine on your hull will not gut you —
+ * chains still happen, because a bomb caught in a blast dies and queues its own.
+ */
+const pendingBlasts = [];
+function resolveBlasts() {
+  let guard = 0;
+  while (pendingBlasts.length && guard++ < 40) {
+    const blast = pendingBlasts.shift();
+    spark(blast.x, blast.y, "#ffb347", 26);
+    spark(blast.x, blast.y, "#ff7a3d", 14);
+
+    const p = world.player;
+    if (p && !p.dead && Math.hypot(p.x - blast.x, p.y - blast.y) < 420) {
+      shake = Math.min(1, shake + 0.7);
+    }
+
+    for (const other of world.creatures) {
+      if (other.dead || other.shield > 0) continue;
+      if (blast.owner && friendly(blast.owner, other)) continue;
+      if (Math.hypot(other.x - blast.x, other.y - blast.y) > other.radius + BLAST_R) continue;
+      for (const t of other.cells.slice()) {
+        if (!other.cells.includes(t)) continue;
+        const d = Math.hypot(t.wx - blast.x, t.wy - blast.y);
+        if (d > BLAST_R) continue;
+        const lost = other.damageCell(t, d < BLAST_R * 0.55 ? 2 : 1);
+        if (lost.length) {
+          shedCells(other, lost);
+          if (isMine(blast.owner)) gainNutrients(lost.length * 2);
+        }
+      }
+    }
+  }
+  pendingBlasts.length = 0;
 }
 
 /* ------------------------------------------------------------------ effects */
@@ -975,6 +1271,12 @@ addEventListener("keydown", e => {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
   if (k === "e") { e.preventDefault(); toggleEditor(); return; }
+  if (k === "q" && !editorOpen) {
+    e.preventDefault();
+    const p = world.player;
+    if (p && !p.dead) detachOnce(p);
+    return;
+  }
   if (k === "escape" && editorOpen) { e.preventDefault(); toggleEditor(); return; }
   if (k === " " && !world.running && splash.style.display !== "none") { e.preventDefault(); startGame(); return; }
   keys.add(k);
@@ -1056,17 +1358,20 @@ function drawCell(c2d, cell, x, y, rot, ox, oy, phase) {
   }
 
   if (cell.type === "flagellum") {
-    const len = HEX * 2.5;
+    // a buried tail is drawn short, still and grey: it is visibly not working
+    const dead = !!cell.blocked;
+    const len = HEX * (dead ? 1.0 : 2.5);
+    const amp = dead ? HEX * 0.12 : HEX * 0.52;
     c2d.beginPath();
     c2d.moveTo(x, y);
     const px = -oy, py = ox;
     for (let i = 1; i <= 14; i++) {
       const t = i / 14;
-      const wob = Math.sin(phase - t * 5.2) * HEX * 0.52 * t;
+      const wob = Math.sin((dead ? 0 : phase) - t * 5.2) * amp * t;
       c2d.lineTo(x + ox * len * t + px * wob, y + oy * len * t + py * wob);
     }
-    c2d.strokeStyle = "#6fc294";
-    c2d.lineWidth = 2.4; c2d.lineCap = "round";
+    c2d.strokeStyle = dead ? "#5a6b62" : "#6fc294";
+    c2d.lineWidth = dead ? 1.8 : 2.4; c2d.lineCap = "round";
     c2d.stroke();
   }
 
@@ -1082,6 +1387,43 @@ function drawCell(c2d, cell, x, y, rot, ox, oy, phase) {
     c2d.beginPath();
     c2d.arc(x, y, HEX * 0.33 * pu, 0, TAU);
     c2d.fillStyle = "#ffd0d8"; c2d.fill();
+  }
+
+  if (cell.type === "neuron") {
+    // dormant while attached, wide awake once the piece is cut loose
+    const live = !!cell.awake;
+    const pu = live ? 1 + Math.sin(phase * 5) * 0.28 : 1;
+    c2d.beginPath();
+    c2d.arc(x, y, HEX * 0.3 * pu, 0, TAU);
+    c2d.fillStyle = live ? "#ff5d54" : "#5d1622"; c2d.fill();
+    c2d.strokeStyle = live ? "#ff8a72" : "#a83247";
+    c2d.lineWidth = 1.3;
+    for (let i = 0; i < 6; i++) {
+      const a = i * (TAU / 6) + (live ? phase * 0.6 : 0.4);
+      c2d.beginPath();
+      c2d.moveTo(x + Math.cos(a) * HEX * 0.38, y + Math.sin(a) * HEX * 0.38);
+      c2d.lineTo(x + Math.cos(a) * HEX * 0.74, y + Math.sin(a) * HEX * 0.74);
+      c2d.stroke();
+    }
+  }
+
+  if (cell.type === "detach") {
+    c2d.strokeStyle = "#6b4512"; c2d.lineWidth = 2;
+    c2d.setLineDash([3, 3]);
+    c2d.beginPath();
+    c2d.moveTo(x - HEX * 0.7, y); c2d.lineTo(x + HEX * 0.7, y);
+    c2d.stroke();
+    c2d.setLineDash([]);
+  }
+
+  if (cell.type === "bomb") {
+    const pu = 1 + Math.sin(phase * 3.4) * 0.2;
+    c2d.beginPath();
+    c2d.arc(x, y, HEX * 0.46, 0, TAU);
+    c2d.strokeStyle = "#a8481a"; c2d.lineWidth = 1.4; c2d.stroke();
+    c2d.beginPath();
+    c2d.arc(x, y, HEX * 0.26 * pu, 0, TAU);
+    c2d.fillStyle = "#fff0c2"; c2d.fill();
   }
   if (hurt) {
     c2d.strokeStyle = "rgba(20,10,12,.55)";
@@ -1263,6 +1605,7 @@ function update(dt) {
       collidePair(world.creatures[i], world.creatures[j], dt);
     }
   }
+  if (pendingBlasts.length) resolveBlasts();
 
   // ---- eating ----
   if (p && !p.dead) {
@@ -1283,13 +1626,19 @@ function update(dt) {
 
   // ---- deaths ----
   for (const c of world.creatures) {
-    if (!c.dead && (!c.cells.length || !c.cells.some(x => x.type === "heart"))) c.dead = true;
+    if (c.isDrone && !c.dead) {
+      c.life -= dt;
+      if (c.life <= 0) c.dead = true;
+    }
+    if (!c.dead && (!c.cells.length ||
+        (!c.isDrone && !c.cells.some(x => x.type === "heart")))) c.dead = true;
     if (c.dead && !c._shed) {
       c._shed = true;
       shedCells(c, c.cells);
       spark(c.x, c.y, "#ffd0d8", 16);
-      if (c !== p) {
-        // dropping a corpse's worth of food is the reward for the kill
+      // a corpse is worth food, but only a real one — otherwise detaching pods
+      // and letting them expire would print nutrients out of nothing
+      if (c !== p && !c.isDrone) {
         for (let i = 0; i < 3 + Math.floor(c.cells.length / 4); i++) {
           world.food.push({ x: c.x + rand(-30, 30), y: c.y + rand(-30, 30), vx: rand(-25, 25), vy: rand(-25, 25), ph: Math.random() * TAU, r: rand(4, 6) });
         }
@@ -1364,6 +1713,12 @@ const el = id => document.getElementById(id);
 function updateHUD() {
   const p = world.player;
   const cost = designCost(design);
+
+  const seams = p && !p.dead ? p.counts.detach : 0;
+  const btn = el("btn-detach");
+  btn.style.display = (seams > 0 && !editorOpen && splash.style.display === "none") ? "block" : "none";
+  el("detach-n").textContent = seams > 1 ? "(" + seams + ")" : "";
+
   el("h-hearts").textContent = p && !p.dead ? p.counts.heart : 0;
   el("h-cells").textContent = p && !p.dead ? p.cells.length : 0;
   el("h-speed").textContent = p && !p.dead ? Math.round(Math.hypot(p.vx, p.vy)) : 0;
@@ -1432,6 +1787,7 @@ function editorStats(d) {
 
 function refreshEditorStats() {
   const d = editDesign || design;
+  const perf = swimStats(d);
   const s = editorStats(d);
   el("s-bio").textContent = s.cost + " / " + world.cap;
   const fill = el("ed-bio").firstElementChild;
@@ -1441,14 +1797,27 @@ function refreshEditorStats() {
   el("s-speed").textContent = Math.round(s.topSpeed);
   el("s-turn").textContent = s.turn.toFixed(1) + " r/s";
   el("s-tough").textContent = s.hp;
+  el("s-tails").textContent = perf.working + " / " + s.n.flagellum;
+  el("s-tails").style.color = perf.buried > 0 ? "#ffb27a" : "";
 
-  const muscle = swimStats(d).muscle;
+  const muscle = perf.muscle;
   el("s-muscle").textContent = Math.round(muscle * 100) + "%";
 
   const warns = [];
   if (s.n.heart === 0) warns.push("No heart cell — you cannot live like this.");
   if (s.n.flagellum === 0) warns.push("No flagellum — you cannot move.");
+  if (perf.buried > 0) {
+    warns.push(perf.buried + (perf.buried === 1 ? " tail is" : " tails are") +
+      " walled in and pushing nothing. A tail needs open water behind it.");
+  }
+  if (perf.working === 0 && s.n.flagellum > 0) warns.push("Nothing can move this body.");
   else if (muscle < 0.25) warns.push("Too little muscle for this much body — you'll be sluggish prey.");
+  if (s.n.neuron > 0 && s.n.detach === 0) {
+    warns.push("Angry neurons stay dormant until a detach seam frees them.");
+  }
+  if (s.n.detach > 0 && s.n.neuron === 0) {
+    warns.push("Detaching will just shed debris — no angry neuron to wake up.");
+  }
   if (s.cost > world.cap) warns.push("Over the biomass limit. Eat more, or cut cells.");
   el("s-warn").textContent = warns.join(" ");
   el("btn-sym").textContent = "Symmetry: " + (symmetry ? "ON" : "OFF");
@@ -1669,6 +2038,10 @@ el("btn-sym").onclick = () => { symmetry = !symmetry; refreshEditorStats(); };
 el("btn-erase").onclick = () => { eraseMode = !eraseMode; refreshEditorStats(); };
 el("btn-clear").onclick = () => { editDesign = starterDesign(); refreshEditorStats(); };
 el("btn-bench").onclick = () => toggleEditor();
+el("btn-detach").onclick = () => {
+  const p = world.player;
+  if (p && !p.dead) detachOnce(p);
+};
 el("btn-apply").onclick = () => toggleEditor();
 
 /* ------------------------------------------------------------- start / die */
