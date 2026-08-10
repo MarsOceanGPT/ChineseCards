@@ -11,22 +11,30 @@ included — is a rigid body made of hexagonal cells roughly the size of a
 fingernail, laid out on an axial hex grid. What you bolt on decides how fast
 you swim, how hard you turn, what you can kill, and what kills you.
 
-## The eight cells
+## The nine cells
 
 | Cell | Cost | Mass | Hits to kill | What it does |
 | --- | --- | --- | --- | --- |
 | **Heart** | 10 | 1.4 | 2 | Lose every one and you dissolve. |
-| **Normal** | 3 | 1.0 | 1 | Muscle. Your flagella can only pull as hard as the flesh behind them. |
-| **Armour** | 8 | 3.0 | 3 | A harder, whiter normal cell. Tough, but heavy enough to slow you down. |
-| **Spike** | 7 | 1.5 | 2 | Shears off the single cell its point is touching. Clacks harmlessly off other spikes. |
-| **Flagellum** | 6 | 0.8 | 1 | Pushes *away from itself*. At the back it drives you forward; at the front it drives you backward. Bury it and it stops. |
+| **Normal** | 3 | 1.0 | 1 | Muscle. Your drives can only pull as hard as the flesh behind them. |
+| **Armour** | 8 | 3.0 | 3 | A harder, whiter normal cell. Tough, heavy, and it can snap the spines that hit it. |
+| **Flagellum** | 6 | 0.8 | 1 | Pushes *away from itself*. At the back it drives you forward; at the front it drives you backward. Bury it and it stops; cut the tail and it is just flesh. |
+| **Jet** | 9 | 1.4 | 2 | Gas thrust. Weaker when buried but never dead, and there is no tail to cut. |
+| **Poison gland** | 10 | 1.3 | 2 | Spits a glowing orb out of any clear side. What it lands on is gone; the rot creeps on from there. |
 | **Angry neuron** | 9 | 1.2 | 2 | Dead weight while attached. Once its piece is cut loose, that piece hunts on its own. |
 | **Detach** | 4 | 0.6 | 1 | A seam. The DETACH button burns it out and frees whatever it was holding on. |
 | **Exploding** | 8 | 1.3 | 1 | Bursts when anything living touches it — or when anything kills it. |
 
-Spikes and flagella attach to whichever side of the body you put them on: each
-one orients itself along the average direction of its empty neighbouring slots,
-so a spike on your flank points outward from your flank.
+**Spikes are not cells.** A spike is a spine you bolt onto a cell you already
+have, for +7 biomass and +0.6 mass, and the cell underneath keeps doing its job
+— a normal cell with a spine on it is still muscle. That means arming yourself
+no longer costs you speed the way a body full of dedicated spike cells did.
+
+Spines, tails, jets and glands all point along whichever side of the body they
+sit on: each cell takes the average direction of its empty neighbouring slots,
+so a spine on your flank points outward from your flank, and a gland on your
+nose spits forward. Line several glands along the front and you have built
+something worth calling a battery.
 
 ## Controls
 
@@ -38,6 +46,9 @@ so a spike on your flank points outward from your flank.
 | Mouse | Steers when the turn keys are idle |
 | `E` | Open and close the cell bench (also works while dissolved) |
 | `Q` / DETACH | Burn one detach seam, outermost first |
+
+Glands fire on their own, on a timer — there is no fire button. You aim them by
+deciding which way they face when you build.
 
 On a phone, one finger does everything — hold to swim, drag to steer — and the
 BENCH and DETACH buttons replace the keys.
@@ -57,10 +68,37 @@ all-armour body tops out at about a fifth of a healthy swimmer's speed.
 **A buried tail pushes nothing.** A flagellum needs open water behind it. Wall
 one in with your own cells and it still costs mass and biomass, but produces no
 thrust at all. This is what stops the armoured-turtle build: you cannot wrap
-yourself in a complete shell of spikes and still swim, because a complete shell
-buries every tail you own. Leave the stern open and you can keep the spikes —
-you just have to accept a soft rear. The bench shows a working/total tail count
-and greys out the tails that are smothered.
+yourself in a complete shell and still swim on tails alone, because a complete
+shell buries every tail you own. Leave the stern open and you keep the spikes —
+you just accept a soft rear. The bench shows a working/total drive count and
+greys out the tails that are smothered.
+
+**A jet gets through anyway.** Gas vents between cells, so a buried jet still
+finds a seam. It drops to 55% rather than to nothing. That does put the sealed
+turtle back on the table — but only as a slow, expensive one: jets cost 9 each,
+weigh nearly twice a tail, and a shell of armour is heavy on top of that. A
+fully enclosed jet body in testing tops out around 20 px/s against 163 for an
+open-tailed swimmer. It moves; it does not get away with anything.
+
+**Tails are real.** A flagellum's tail is a physical thing, not decoration.
+Rake it with a spine or crush it between two hulls and it comes off; what is
+left is an ordinary normal cell. Tails stick out further than the hull, so they
+are the first thing an attacker reaches — going for someone's stern to strip
+their propulsion is a real tactic, and so is preferring jets if you expect it.
+
+**Armour fights back.** A spine that shears an armour cell chips it as usual,
+but has a small chance (about one in eleven) of snapping clean off. Armour is
+the counter to a spike build. This number is deliberately small: at one in four
+a spine breaks before it can chew through even a single armour cell, and an
+armour-nosed hunter just disarms everything that touches it.
+
+**Rot spreads and then stops.** A poison orb kills the cell it lands on
+outright, then a couple of its neighbours begin to rot: they lose a little at a
+time and pass it on, two rounds deep, before it burns out. It is worse than an
+explosion and much slower — averaged over repeated impacts a single orb costs a
+soft grazer about 12 cells against a bomb's 9. Armour shrugs most of it off: the
+same orb takes about 6 cells off an armoured hunter and has never killed one
+outright in testing.
 
 **Spikes take one cell at a time.** A spike destroys the cell its tip touches,
 not the creature. Spike-on-spike does no damage — but a spike is not a shield
@@ -113,8 +151,8 @@ worst possible tactic, so treat these as a floor rather than a rating:
 | Your build | Drifter | Grazer | Swimmer | Hunter | Spikeball |
 | --- | --- | --- | --- | --- | --- |
 | Starter (no spikes) | 0/5 | 0/5 | you die | you die | you die |
-| 3 nose spikes | 5/5 ~6s | 1/5 | 4/5 ~23s | 1/5 | 0/5 |
-| Armoured, 5 spikes | 5/5 ~6s | 5/5 ~15s | 5/5 ~12s | 2/5 | 0/5 |
+| 3 nose spines | 5/5 ~5s | 0/5 | 5/5 ~12s | 0/5 | 0/5 |
+| Armoured, 5 spines | 5/5 ~5s | 5/5 ~8s | 5/5 ~12s | 2/5 ~36s | 0/5 |
 
 The middle rows swing a lot between runs, because whether you ever see a flank
 depends on where a hunter happens to be in its lunge cycle and which way a
