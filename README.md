@@ -24,6 +24,11 @@ you swim, how hard you turn, what you can kill, and what kills you.
 | **Angry neuron** | 9 | 1.2 | 2 | Dead weight while attached. Once its piece is cut loose, that piece hunts on its own. |
 | **Detach** | 4 | 0.6 | 1 | A seam. The DETACH button burns it out and frees whatever it was holding on. |
 | **Exploding** | 8 | 1.3 | 1 | Bursts when anything living touches it — or when anything kills it. |
+| **Flexible** | 7 | 1.6 | 2 | *Earned.* Rubbery: spines slide off it, but rot races through and eats it outright. |
+| **Parasite** | 9 | 1.1 | 1 | *Earned.* Bites what it touches, banks the life, then mends your worst-damaged cell. |
+
+The last two are not on the bench when you start. They are the ring's cells,
+and you take **one** of them off its corpse.
 
 **Spikes are not cells.** A spike is a spine you bolt onto a cell you already
 have, for +7 biomass and +0.6 mass, and the cell underneath keeps doing its job
@@ -92,13 +97,24 @@ the counter to a spike build. This number is deliberately small: at one in four
 a spine breaks before it can chew through even a single armour cell, and an
 armour-nosed hunter just disarms everything that touches it.
 
-**Rot spreads and then stops.** A poison orb kills the cell it lands on
-outright, then a couple of its neighbours begin to rot: they lose a little at a
-time and pass it on, two rounds deep, before it burns out. It is worse than an
-explosion and much slower — averaged over repeated impacts a single orb costs a
-soft grazer about 12 cells against a bomb's 9. Armour shrugs most of it off: the
-same orb takes about 6 cells off an armoured hunter and has never killed one
-outright in testing.
+**Rot weakens; it never kills.** A poison orb destroys the cell it lands on,
+and the rot spreads from there — three rounds deep, three neighbours a round.
+But a rotting cell is only ever worn down to its last hit point, never past it.
+What rot actually does is *switch cells off*: rotting muscle stops counting,
+rotting drives stop pushing, rotting glands stop firing, rotting parasites stop
+biting. In testing a single orb disables around 14 cells and drops a swimmer to
+under a quarter of its speed — and kills exactly nothing, ever.
+
+That is deliberate, and it is the fix for a real exploit. When rot could kill,
+the best strategy in the game was to spit from range, swim away, and come back
+to a corpse: no risk, free food, and it worked on almost everything because
+almost nothing wore armour. Now poison is a *softener*. It strips armour to
+paper and leaves a body slow and quiet, but converting that into kills still
+means going in.
+
+**Armour is the one thing rot cannot finish** — a 3-hit armour cell rots down to
+1 and stops there. So rot is the answer to armour, and closing in is the answer
+to rot.
 
 **Spikes take one cell at a time.** A spike destroys the cell its tip touches,
 not the creature. Spike-on-spike does no damage — but a spike is not a shield
@@ -136,6 +152,29 @@ to print nutrients.
 - **Spikeball** — a slowly tumbling fortress. It can barely chase you, and a
   light build cannot crack it. Its shell alternates spikes with soft cells;
   the soft radials are the only way in.
+- **Spitter** — hangs back and spits rot at you. The answer to sitting inside
+  armour, and the reason a sealed turtle is not a free win.
+- **Popper** — fast, fragile, and carrying three mines. The answer to stacking
+  armour: plate does not save you from a blast.
+- **Darter** — armoured and jet-driven, so shearing its tails off is not an
+  option, because it hasn't got any.
+
+## The ring
+
+When your biomass cap reaches its maximum of 250 — when there is nothing left
+to grow into — something turns up.
+
+It is a wheel of armour plate and spines, hinged at intervals with rubber that
+your spines cannot bite. Three thin spokes hold a single heart at the dead
+centre, and pods wait in the hollows: an angry neuron, a parasite and a tail
+each, which it cuts loose and throws at you.
+
+One arc of the rim was never grown. That gap is the door, and it is not a
+mistake. You get in through it, or you shoot through it from range, or you
+don't get in at all.
+
+Break it and you take one of its two cells for your own. One only — the other
+stays in the ring.
 
 Hostiles lunge and then peel away to line up again. That recovery is when their
 flank is open — a hunter that simply tracked you would keep its spiked face
@@ -148,17 +187,23 @@ Prey sprint and then tire. Chase a grazer long enough and it slows down.
 Wins out of five 45-second duels, ramming straight ahead the whole time — the
 worst possible tactic, so treat these as a floor rather than a rating:
 
-| Your build | Drifter | Grazer | Swimmer | Hunter | Spikeball |
-| --- | --- | --- | --- | --- | --- |
-| Starter (no spikes) | 0/5 | 0/5 | you die | you die | you die |
-| 3 nose spines | 5/5 ~5s | 0/5 | 5/5 ~12s | 0/5 | 0/5 |
-| Armoured, 5 spines | 5/5 ~5s | 5/5 ~8s | 5/5 ~12s | 2/5 ~36s | 0/5 |
+| Your build | Drifter | Grazer | Swimmer | Hunter | Spikeball | Spitter | Popper | Darter |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Starter (no spines) | 0/5 | 0/5 | you die | you die | you die | you die | you die | you die |
+| 3 nose spines | 5/5 ~5s | 0/5 | 4/5 ~19s | 0/5 | 0/5 | 0/5 | 1/5 | 0/5 |
+| Armoured, 5 spines | 5/5 ~5s | 5/5 ~8s | 5/5 ~13s | 0/5 | 0/5 | 0/5 | 0/5 | 0/5 |
 
-The middle rows swing a lot between runs, because whether you ever see a flank
-depends on where a hunter happens to be in its lunge cycle and which way a
-spikeball happens to be facing. The shape is what matters: the starter body
-cannot kill anything, three spikes make you a predator of small things, and
-spikeballs need a serious build or something cleverer than ramming.
+**Read this table carefully, because it flatters nobody.** The bot that
+produced it drives straight at its target and never stops, which is the worst
+possible tactic against anything with a face full of spines. Against the hunter
+it scores exactly zero — but the same build attacking the hunter's *stern*
+takes 4.5 cells a fight. The hunter is not unkillable; a straight charge into
+its armoured nose is just a spine-on-spine stalemate, which is what an armoured
+nose is for.
+
+So treat the zeroes as "ramming does not work here", not as "this cannot be
+beaten". The real answer to the right-hand columns is to stop ramming: rot them
+first, take their flanks, or shoot them from outside their reach.
 
 The starter body killing nothing is deliberate — the first thing the game asks
 you to do is go to the bench and decide what kind of animal you want to be.

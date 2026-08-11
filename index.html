@@ -109,6 +109,23 @@
   .big:hover { background: rgba(67,201,160,.32); }
   #dead h1 { color: var(--heart); }
 
+  #reward {
+    position: absolute; inset: 0; display: none; z-index: 6; align-items: center; justify-content: center;
+    background: rgba(3, 12, 18, .86); backdrop-filter: blur(4px); text-align: center; padding: 14px;
+  }
+  #reward.open { display: flex; }
+  #reward h1 { color: #8fd6a8; }
+  #reward-picks { display: flex; gap: 12px; margin: 6px 0 16px; flex-wrap: wrap; justify-content: center; }
+  .pick {
+    flex: 1 1 200px; max-width: 240px; text-align: left; cursor: pointer; font: inherit;
+    padding: 13px 14px; border-radius: 11px; color: var(--text);
+    background: rgba(255,255,255,.05); border: 1px solid var(--line);
+  }
+  .pick:hover { border-color: #57c8e8; background: rgba(87,200,232,.12); }
+  .pick .sw { display: inline-block; width: 15px; height: 15px; border-radius: 3px; vertical-align: -2px; margin-right: 7px; }
+  .pick .nm { font-weight: 600; font-size: 13px; }
+  .pick .ds { display: block; margin-top: 7px; color: var(--dim); font-size: 11px; line-height: 1.55; }
+
   /* ---------- Top-right controls (the only way in without a keyboard) ------ */
   #topright {
     position: absolute; z-index: 4; display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
@@ -249,6 +266,16 @@
   </div>
 </div>
 
+<div id="reward">
+  <div class="card panel">
+    <h1>The ring is broken</h1>
+    <div class="tag">take one of its cells for your own</div>
+    <div id="reward-picks"></div>
+    <p style="text-align:center;color:#7fa6b8;font-size:11.5px;margin:0">
+      One only. The other stays in the ring.</p>
+  </div>
+</div>
+
 <div id="dead">
   <div class="card panel">
     <h1>Dissolved</h1>
@@ -287,7 +314,7 @@ const SPIKE_CLASH = 11;         // tip-to-tip range at which two spikes clack
 
 const START_CAP = 56;           // starting biomass allowance (starter body costs 40)
 const CAP_PER_NUTRIENT = 0.6;
-const CAP_MAX = 240;
+const CAP_MAX = 250;   // the ring turns up when you reach this
 const FOOD_VALUE = 2;
 
 const VIEW_SPAWN_MIN = 780;     // enemies appear in a ring around you
@@ -343,8 +370,28 @@ const CELLS = {
     cost: 8,  mass: 1.3, hp: 1,
     desc: "Bursts when anything living touches it, or when it dies."
   },
+  flex: {
+    name: "Flexible", color: "#6d7594", edge: "#39405c",
+    cost: 7,  mass: 1.6, hp: 2, locked: true,
+    desc: "Rubbery. Spines slide off it — but rot races through and eats it."
+  },
+  parasite: {
+    name: "Parasite", color: "#7b3f8f", edge: "#3d1c49",
+    cost: 9,  mass: 1.1, hp: 1, locked: true,
+    desc: "Bites what it touches and banks the life, then mends your worst cell."
+  },
 };
-const CELL_ORDER = ["heart", "normal", "armor", "flagellum", "jet", "gland", "neuron", "detach", "bomb"];
+const CELL_ORDER = ["heart", "normal", "armor", "flagellum", "jet", "gland",
+  "neuron", "detach", "bomb", "flex", "parasite"];
+
+// Cells you have to earn. The set is saved, so a run remembers what you took.
+const unlocked = new Set();
+const isUnlocked = t => !CELLS[t] || !CELLS[t].locked || unlocked.has(t);
+
+const PARASITE_BITE = 1.4;      // seconds between bites
+const PARASITE_BANK = 3;        // most life one parasite can hold at a time
+const PARASITE_MEND = 1.4;      // seconds between repairs
+const FLEX_ROT_SPEED = 2.2;     // how much faster rot chews through rubber
 
 /**
  * A spike is not a cell any more, it is a spine bolted onto one. The cell
@@ -362,15 +409,26 @@ const SPIKE_SNAP_ON_ARMOUR = 0.09;
 
 const TAIL_LEN = HEX * 2.5;     // how far a flagellum's tail trails behind it
 const BLAST_R = HEX * 3.8;      // exploding cell radius
+const BOMB_GAP = 0.7;           // seconds before another of your mines can go off
 const DRONE_LIFE = 30;          // seconds a detached hunting piece survives
 const DRONE_RAGE = 2.4;         // how much harder a woken neuron drives its pod
 const JET_BURIED = 0.55;        // a walled-in jet still finds a seam, at a price
 
-const POISON_TICK = 1.3;        // seconds between rot ticks
-const POISON_TICKS = 2;         // how much rot one cell suffers before it burns out
-const POISON_SPREAD = 1.0;      // seconds before a rotting cell infects its neighbours
-const POISON_GENS = 2;          // how many rounds the rot travels before it stops
-const POISON_FANOUT = 2;        // neighbours each rotting cell can infect
+/**
+ * Rot weakens, it does not kill.
+ *
+ * A rotting cell is worn down to one hit point and no further, so poison can
+ * never finish anything by itself. That is the whole fix for the hit-and-run
+ * farm: fire an orb, swim away, and you come back to a body that is soft
+ * rather than a body that is dead. Because it cannot kill, it is safe to let
+ * it sweep much wider than before — it looks alarming and strips armour to
+ * nothing, but converting that into kills still means closing in.
+ */
+const POISON_TICK = 1.1;        // seconds between rot ticks
+const POISON_TICKS = 3;         // how far down one cell is worn before it burns out
+const POISON_SPREAD = 0.85;     // seconds before a rotting cell infects its neighbours
+const POISON_GENS = 3;          // how many rounds the rot travels before it stops
+const POISON_FANOUT = 3;        // neighbours each rotting cell can infect
 const ORB_SPEED = 210, ORB_LIFE = 2.6, ORB_R = 5.5;
 const ORB_SPREAD = 0.55;        // how wide a gland's aim wanders, radians
 const GLAND_CD = [4, 7];        // seconds between shots from one gland
@@ -448,6 +506,13 @@ function normalizeDesign(design) {
     out.push({ q: c.q, r: c.r, type: c.type, spike: !!c.spike });
   }
   return out;
+}
+
+/** Strip anything the player has not earned out of a loaded blueprint. */
+function stripLocked(design) {
+  return connectedTo(design.filter(c => isUnlocked(c.type)),
+    (design.find(c => c.type === "heart") || { q: 0 }).q,
+    (design.find(c => c.type === "heart") || { r: 0 }).r);
 }
 
 function designCounts(design) {
@@ -546,7 +611,7 @@ function swimStats(cells, mass, layout) {
   const L = layout || layoutCells(cells);
   const n = designCounts(cells);
   let normalMass = 0;
-  for (const c of cells) if (c.type === "normal") normalMass += CELLS.normal.mass;
+  for (const c of cells) if (c.type === "normal" && !c.wither) normalMass += CELLS.normal.mass;
   const m = mass !== undefined ? mass : cells.reduce((s, c) => s + cellMass(c), 0);
   const muscle = m > 0 ? normalMass / m : 0;
   const speedFactor = 0.35 + 0.9 * muscle;
@@ -617,6 +682,7 @@ class Creature {
     this.flagPhase = Math.random() * TAU;
     this.shield = 0;
     this.ai = null;
+    this.bombCd = 0;
     this.isDrone = false;
     this.team = null;               // set on drones: whose side they fight for
     this.life = Infinity;
@@ -627,6 +693,7 @@ class Creature {
       tail: c.type === "flagellum",         // a physical thing that can be cut off
       lx: 0, ly: 0, ox: 1, oy: 0,           // local pos + outward normal
       wx: 0, wy: 0, cd: 0, flash: 0, fire: rand(0.5, GLAND_CD[1]),
+      bite: 0, mend: PARASITE_MEND, bank: 0, wither: 0,
     }));
     this.rebuild();
     this.syncCells();
@@ -657,6 +724,7 @@ class Creature {
       c.drive = c.type === "flagellum" ? (c.blocked ? 0 : 1)
         : c.type === "jet" ? (c.blocked ? JET_BURIED : 1) : 0;
       if (c.type === "flagellum" && !c.tail) c.drive = 0;
+      if (c.wither > 0) c.drive = 0;              // rot switches a drive off
       I += cellMass(c) * (c.lx * c.lx + c.ly * c.ly);
       radius = Math.max(radius, Math.hypot(c.lx, c.ly));
     }
@@ -706,6 +774,7 @@ class Creature {
 
   step(dt) {
     if (this.shield > 0) this.shield -= dt;
+    if (this.bombCd > 0) this.bombCd -= dt;
     // flagella push along -outward, so a tail at the back drives you forward
     if (this.thrust !== 0 && this.units > 0) {
       const per = this.thrustForce / this.units * this.thrust;
@@ -848,10 +917,148 @@ function bpGrazer() {
   return d;
 }
 
+/** Keeps its distance and spits rot. The answer to sitting inside armour. */
+function bpSpitter() {
+  const d = [{ q: 0, r: 0, type: "heart" }];
+  for (const h of hexRing(1)) d.push({ ...h, type: "normal" });
+  for (const h of hexRing(2)) {
+    const p = axialToPixel(h.q, h.r);
+    d.push({ ...h, type: p.x > 14 ? "gland" : (p.x < -20 ? "flagellum" : "normal") });
+  }
+  return d;
+}
+
+/** Fast, fragile, and full of mines. The answer to stacking armour. */
+function bpPopper() {
+  const d = [{ q: 0, r: 0, type: "heart" }];
+  for (const h of hexRing(1)) d.push({ ...h, type: "normal" });
+  for (const h of hexRing(2)) {
+    const p = axialToPixel(h.q, h.r);
+    // three warheads, not five: at five, one contact wipes even an armoured
+    // body in under three seconds with no way to disengage
+    d.push({ ...h, type: p.x > 30 ? "bomb" : (p.x < -20 ? "flagellum" : "normal") });
+  }
+  return d;
+}
+
+/** Jet-driven and armoured, so shearing its tails off is not an option. */
+function bpDarter() {
+  const d = [{ q: 0, r: 0, type: "heart" }];
+  for (const h of hexRing(1)) d.push({ ...h, type: "armor" });
+  for (const h of hexRing(2)) {
+    const p = axialToPixel(h.q, h.r);
+    d.push({ ...h, type: p.x < -8 ? "jet" : "normal", spike: p.x > 4 });
+  }
+  return d;
+}
+
+/**
+ * The ring.
+ *
+ * A wheel of armour and spines, hinged at intervals with rubber that spines
+ * cannot bite. One hinge is missing — that gap is the door. Inside, thin
+ * armour spokes run to a heart at the dead centre, and pods wait to be thrown
+ * at whatever comes through.
+ *
+ * The shape is the puzzle: you cannot chew the rim (rubber hinges, armour
+ * plate, spines facing out), so you either shoot through the gap from range
+ * or you go in and survive the inside.
+ */
+const BOSS_RING = 6;
+function bpRing() {
+  const d = [{ q: 0, r: 0, type: "heart" }];
+
+  // the rim: armour plate and spines, hinged with rubber, and one missing arc
+  const ring = hexRing(BOSS_RING);
+  ring.forEach((h, i) => {
+    if (i < 3) return;                   // the door
+    const hinge = i % 6 === 3;
+    d.push({ ...h, type: hinge ? "flex" : "armor", spike: !hinge && i % 2 === 0 });
+  });
+
+  // three thin spokes holding the heart, leaving wide hollows between them
+  for (const [dq, dr] of [[1, 0], [0, -1], [-1, 1]]) {
+    for (let k = 1; k < BOSS_RING; k++) {
+      d.push({ q: dq * k, r: dr * k, type: k <= 2 ? "armor" : "normal" });
+    }
+  }
+
+  // Pods hang in the hollows on a single seam. Finding the attachment by
+  // search rather than by hand is what makes them actually come away: any pod
+  // cell that also touched a spoke would keep the whole thing bolted on.
+  const skeleton = new Set(d.map(c => key(c.q, c.r)));
+  const dist = (q, r) => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+  const touches = (q, r, set) => HEX_DIRS.some(([dq, dr]) => set.has(key(q + dq, r + dr)));
+
+  // Everything already committed. A pod must touch this only through its own
+  // seam — including other pods, or two neighbouring pods hold each other on
+  // and neither ever comes away.
+  const structural = new Set(skeleton);
+
+  const kinds = ["neuron", "parasite", "flagellum"];
+  let made = 0;
+  for (const a of hexDisc(4)) {
+    if (made >= 6) break;
+    const ak = key(a.q, a.r);
+    if (structural.has(ak) || dist(a.q, a.r) < 2) continue;
+    if (!touches(a.q, a.r, skeleton)) continue;       // the seam must hold on
+
+    const pod = [];
+    const frontier = [a];
+    const mine = new Set([ak]);
+    while (frontier.length && pod.length < kinds.length) {
+      const cur = frontier.shift();
+      for (const [dq, dr] of HEX_DIRS) {
+        const q = cur.q + dq, r = cur.r + dr, k = key(q, r);
+        if (mine.has(k) || structural.has(k)) continue;
+        if (dist(q, r) > BOSS_RING - 2) continue;      // stay clear of the rim
+        if (touches(q, r, structural)) continue;       // must not re-bolt itself
+        mine.add(k);
+        pod.push({ q, r });
+        frontier.push({ q, r });
+        if (pod.length >= kinds.length) break;
+      }
+    }
+    if (pod.length < kinds.length) continue;
+
+    d.push({ q: a.q, r: a.r, type: "detach" });
+    structural.add(ak);
+    pod.forEach((c, i) => {
+      d.push({ q: c.q, r: c.r, type: kinds[i] });
+      structural.add(key(c.q, c.r));
+    });
+    // block the ring of cells around this pod so the next one keeps its distance
+    for (const k of mine) {
+      const [q, r] = k.split(",").map(Number);
+      for (const [dq, dr] of HEX_DIRS) structural.add(key(q + dq, r + dr));
+    }
+    made++;
+  }
+  return connectedTo(d, 0, 0);
+}
+
+/** Trim a design down to the part actually joined to a given cell. */
+function connectedTo(design, q0, r0) {
+  const map = new Map(design.map(c => [key(c.q, c.r), c]));
+  const seen = new Set([key(q0, r0)]);
+  const stack = [map.get(key(q0, r0))].filter(Boolean);
+  while (stack.length) {
+    const c = stack.pop();
+    for (const [dq, dr] of HEX_DIRS) {
+      const k = key(c.q + dq, c.r + dr);
+      if (map.has(k) && !seen.has(k)) { seen.add(k); stack.push(map.get(k)); }
+    }
+  }
+  return design.filter(c => seen.has(key(c.q, c.r)));
+}
+
 const SPECIES = {
   spikeball: { bp: bpSpikeball, faction: "hostile", ai: "drift",  weight: 3 },
   swimmer:   { bp: bpSwimmer,   faction: "hostile", ai: "chase",  weight: 3 },
   hunter:    { bp: bpHunter,    faction: "hostile", ai: "chase",  weight: 1 },
+  spitter:   { bp: bpSpitter,   faction: "hostile", ai: "kite",   weight: 2 },
+  popper:    { bp: bpPopper,    faction: "hostile", ai: "chase",  weight: 2 },
+  darter:    { bp: bpDarter,    faction: "hostile", ai: "chase",  weight: 1 },
   drifter:   { bp: bpDrifter,   faction: "prey",    ai: "wander", weight: 3 },
   grazer:    { bp: bpGrazer,    faction: "prey",    ai: "wander", weight: 2 },
 };
@@ -870,8 +1077,11 @@ const world = {
   running: false,
   deathTimer: 0,
   saveTimer: 6,
+  boss: null,
+  bossBeaten: false,
 };
 
+loadProgress();          // unlocks must be known before a design is filtered
 let design = loadDesign();
 
 function loadDesign() {
@@ -879,7 +1089,7 @@ function loadDesign() {
     const raw = localStorage.getItem("cellsea.design");
     if (raw) {
       const d = JSON.parse(raw);
-      const clean = normalizeDesign(Array.isArray(d) ? d : []);
+      const clean = stripLocked(normalizeDesign(Array.isArray(d) ? d : []));
       if (clean.length && clean.some(c => c.type === "heart")) return clean;
     }
   } catch (e) { /* ignore corrupt saves */ }
@@ -889,7 +1099,18 @@ function saveDesign() {
   try {
     localStorage.setItem("cellsea.design", JSON.stringify(design));
     localStorage.setItem("cellsea.nutrients", String(world.nutrients));
+    localStorage.setItem("cellsea.unlocked", JSON.stringify([...unlocked]));
+    localStorage.setItem("cellsea.boss", world.bossBeaten ? "1" : "0");
   } catch (e) { /* private mode, whatever */ }
+}
+
+function loadProgress() {
+  try {
+    for (const t of JSON.parse(localStorage.getItem("cellsea.unlocked") || "[]")) {
+      if (CELLS[t]) unlocked.add(t);
+    }
+    world.bossBeaten = localStorage.getItem("cellsea.boss") === "1";
+  } catch (e) { /* ignore */ }
 }
 
 function capForNutrients(n) { return Math.min(CAP_MAX, Math.floor(START_CAP + n * CAP_PER_NUTRIENT)); }
@@ -935,6 +1156,25 @@ function spawnCreature() {
 }
 
 /** Food arrives in loose patches — swimming somewhere should pay off. */
+/**
+ * The ring turns up once you have grown as far as biomass allows. It is the
+ * wall at the end of the growth curve: nothing else in the sea is a reason to
+ * stop eating, so this is what the cap is *for*.
+ */
+function maybeSpawnBoss() {
+  if (world.boss || world.bossBeaten) return;
+  if (world.cap < CAP_MAX) return;
+  const { x, y } = spawnRing(rand(900, 1200));
+  const b = new Creature(bpRing(), x, y, Math.random() * TAU, "hostile");
+  b.species = "ring";
+  b.isBoss = true;
+  b.ai = makeAI("ring", b.angle);
+  b.ai.spin = (Math.random() < 0.5 ? -1 : 1) * rand(0.25, 0.45);
+  world.creatures.push(b);
+  world.boss = b;
+  world.bossSeen = 0;
+}
+
 function spawnFoodPatch(nearPlayer) {
   const o = spawnRing(nearPlayer ? rand(160, FOOD_DIST) : rand(VIEW_SPAWN_MIN, FOOD_DIST));
   const n = randInt(4, 9);
@@ -1067,6 +1307,7 @@ function makeAI(kind, angle) {
     stamina: 1,
     phase: "aim",                     // aim -> charge -> recover, for hunters
     aim: angle || 0,
+    launch: rand(3, 6),               // the ring's pod timer
   };
 }
 
@@ -1108,6 +1349,41 @@ function runAI(c, dt) {
       if (ai.t <= 0) { ai.heading = Math.random() * TAU; ai.t = rand(1, 3); }
       c.steer = clamp(angleDiff(c.angle, ai.heading) * 1.5, -1, 1);
       c.thrust = 0.5;
+    }
+    return;
+  }
+
+  // Keeps its distance and lets its glands work. Backs off when you close.
+  if (ai.kind === "kite") {
+    if (!p || p.dead) {
+      if (ai.t <= 0) { ai.heading = Math.random() * TAU; ai.t = rand(2, 5); }
+      c.steer = clamp(angleDiff(c.angle, ai.heading) * 1.6, -1, 1);
+      c.thrust = 0.35;
+      return;
+    }
+    const d = Math.hypot(p.x - c.x, p.y - c.y);
+    const toward = Math.atan2(p.y - c.y, p.x - c.x);
+    // face the player either way, so the glands on its nose stay pointed
+    c.steer = clamp(angleDiff(c.angle, toward) * 2, -1, 1);
+    c.thrust = d < 330 ? -0.7 : (d > 620 ? 0.7 : 0.1);
+    return;
+  }
+
+  // The ring: turns slowly, closes slowly, and throws pods at you.
+  if (ai.kind === "ring") {
+    c.av += (ai.spin - c.av) * Math.min(1, dt * 12);
+    c.thrust = 0;
+    if (p && !p.dead) {
+      const d = Math.hypot(p.x - c.x, p.y - c.y);
+      if (d < 1500) {
+        c.vx += (p.x - c.x) / d * 22 * dt;
+        c.vy += (p.y - c.y) / d * 22 * dt;
+      }
+      ai.launch -= dt;
+      if (ai.launch <= 0 && d < 900) {
+        ai.launch = rand(5, 9);
+        detachOnce(c);
+      }
     }
     return;
   }
@@ -1186,13 +1462,28 @@ function collidePair(A, B, dt) {
     // --- exploding cells go off on contact with anything living ---
     bombPass(A, B);
     bombPass(B, A);
+    // --- parasites bite whatever they are pressed against ---
+    parasitePass(A, B);
+    parasitePass(B, A);
   }
 
   // --- body: keep the two shapes out of each other ---
+  // Narrow to the cells actually near the other body first. The ring is 80+
+  // cells; without this, every creature standing near it pays 80 x n checks a
+  // substep and the framerate halves.
   const minD = CELL_R * 2;
+  const nearA = A.cells.length * B.cells.length > 300
+    ? A.cells.filter(c => Math.hypot(c.wx - B.x, c.wy - B.y) < B.radius + minD)
+    : A.cells;
+  if (!nearA.length) return;
+  const nearB = A.cells.length * B.cells.length > 300
+    ? B.cells.filter(c => Math.hypot(c.wx - A.x, c.wy - A.y) < A.radius + minD)
+    : B.cells;
+  if (!nearB.length) return;
+
   let handled = 0;
-  for (const a of A.cells) {
-    for (const b of B.cells) {
+  for (const a of nearA) {
+    for (const b of nearB) {
       let nx = b.wx - a.wx, ny = b.wy - a.wy;
       const d2 = nx * nx + ny * ny;
       if (d2 > minD * minD || d2 < 1e-6) continue;
@@ -1253,6 +1544,7 @@ function tailPoints(creature, cell) {
 function tailPass(A, B) {
   for (const c of A.cells) {
     if (c.type !== "flagellum" || !c.tail) continue;
+    if (Math.hypot(c.wx - B.x, c.wy - B.y) > B.radius + TAIL_LEN) continue;
     let cut = false;
     for (const p of tailPoints(A, c)) {
       for (const t of B.cells) {
@@ -1295,6 +1587,9 @@ function spikePass(A, B) {
         const bx = t.wx + bd.x * SPIKE_REACH, by = t.wy + bd.y * SPIKE_REACH;
         const td = Math.min(dd, Math.hypot(tx - bx, ty - by));
         if (td < clashD) { clashD = td; clash = t; }
+      } else if (t.type === "flex") {
+        // rubber: the point slides off instead of biting
+        if (dd < clashD) { clashD = dd; clash = t; }
       } else if (dd < victimD) { victimD = dd; victim = t; }
     }
 
@@ -1339,7 +1634,12 @@ function spikePass(A, B) {
  */
 function infect(cell, gen) {
   if (cell.rot || gen > POISON_GENS) return;
-  cell.rot = { gen, tick: POISON_TICK, left: POISON_TICKS, spread: POISON_SPREAD };
+  // rubber is porous: rot runs through it and eats it much faster
+  const rate = cell.type === "flex" ? FLEX_ROT_SPEED : 1;
+  cell.rot = {
+    gen, tick: POISON_TICK / rate, left: POISON_TICKS,
+    spread: POISON_SPREAD / rate, rate,
+  };
 }
 
 /** Seed the rot into a few of a cell's neighbours, chosen at random. */
@@ -1352,6 +1652,26 @@ function infectAround(creature, cell, gen) {
   for (let k = 0; k < POISON_FANOUT && near.length; k++) {
     infect(near.splice(Math.floor(Math.random() * near.length), 1)[0], gen);
   }
+}
+
+/**
+ * Rot does not kill, so its real weapon is that a rotting cell *stops working*.
+ * Muscle stops counting, drives stop pushing, glands stop firing, parasites
+ * stop biting. Poison a swimmer and it goes slow and quiet instead of dying —
+ * you still have to go in and finish it, which is the whole point.
+ */
+function witherState(creature, dt) {
+  let changed = false;
+  for (const c of creature.cells) {
+    if (c.rot) {
+      if (!c.wither) changed = true;
+      c.wither = 3;                       // refreshed while the rot is on it
+    } else if (c.wither > 0) {
+      c.wither -= dt;
+      if (c.wither <= 0) { c.wither = 0; changed = true; }
+    }
+  }
+  if (changed) { creature.rebuild(); creature.syncCells(); }
 }
 
 function stepPoison(creature, dt) {
@@ -1372,10 +1692,17 @@ function stepPoison(creature, dt) {
 
     rot.tick -= dt;
     if (rot.tick <= 0) {
-      rot.tick = POISON_TICK;
+      rot.tick = POISON_TICK / (rot.rate || 1);
       rot.left--;
-      const lost = creature.damageCell(c, 1);
-      if (lost.length) { shedCells(creature, lost); continue; }
+      // rubber is the exception: rot does destroy it outright
+      if (c.type === "flex") {
+        const lost = creature.damageCell(c, 1);
+        if (lost.length) { shedCells(creature, lost); continue; }
+        if (rot.left <= 0) c.rot = null;
+        continue;
+      }
+      // never the killing blow — wear the cell down to its last point and stop
+      if (c.hp > 1) { c.hp--; c.flash = 0.6; }
       if (rot.left <= 0) c.rot = null;
     }
   }
@@ -1417,7 +1744,7 @@ function stepOrbs(dt) {
 /** Glands spit at random, but only ever out of a side with clear water. */
 function fireGlands(creature, dt) {
   for (const c of creature.cells) {
-    if (c.type !== "gland") continue;
+    if (c.type !== "gland" || c.wither > 0) continue;
     c.fire -= dt;
     if (c.fire > 0) continue;
     c.fire = rand(GLAND_CD[0], GLAND_CD[1]);
@@ -1448,15 +1775,78 @@ function shotIsClear(creature, cell, angle) {
   return true;
 }
 
+/* --------------------------------------------------------------- parasites */
+
+/**
+ * A parasite bites whatever it is touching, banks the life it takes, and
+ * spends it mending your worst-damaged cell.
+ *
+ * Three brakes keep this from being immortality: it only ever restores damage
+ * (never past a cell's own maximum), it can only hold a few points at a time,
+ * and it has to be in contact with something alive to take anything at all —
+ * so healing is something you fight for, not something you passively have.
+ */
+function parasitePass(A, B) {
+  if (B.shield > 0) return;
+  const reach = CELL_R * 2 + 3;
+  for (const p of A.cells) {
+    if (p.type !== "parasite" || p.bite > 0 || p.wither > 0) continue;
+    let victim = null, best = reach;
+    if (Math.hypot(p.wx - B.x, p.wy - B.y) > B.radius + reach) continue;
+    for (const t of B.cells) {
+      const d = Math.hypot(p.wx - t.wx, p.wy - t.wy);
+      if (d < best) { best = d; victim = t; }
+    }
+    if (!victim) continue;
+
+    p.bite = PARASITE_BITE;
+    if ((p.bank || 0) < PARASITE_BANK) p.bank = (p.bank || 0) + 1;
+    spark((p.wx + victim.wx) / 2, (p.wy + victim.wy) / 2, "#c07ad4", 5);
+    const lost = B.damageCell(victim, 1);
+    if (lost.length) {
+      shedCells(B, lost);
+      if (isMine(A)) gainNutrients(lost.length * 2);
+    }
+  }
+}
+
+/** Spend banked life on the most damaged cell we have. */
+function stepParasites(creature, dt) {
+  for (const p of creature.cells) {
+    if (p.type !== "parasite") continue;
+    if (p.bite > 0) p.bite -= dt;
+    if (!p.bank) continue;
+    p.mend -= dt;
+    if (p.mend > 0) continue;
+    p.mend = PARASITE_MEND;
+
+    let worst = null, gap = 0;
+    for (const c of creature.cells) {
+      const d = c.maxHp - c.hp;
+      if (d > gap) { gap = d; worst = c; }
+    }
+    if (!worst) continue;          // nothing hurt: the life stays banked
+    worst.hp++;
+    p.bank--;
+    worst.withered = false;
+    spark(worst.wx, worst.wy, "#d9a8e8", 5);
+  }
+}
+
 /** A's exploding cells against B's body. Killing the cell is what detonates it. */
 function bombPass(A, B) {
   if (B.shield > 0) return;
+  // One at a time. A cluster of mines all touching at once is a single
+  // instant wipe — a bomber went from a threat to an unavoidable death.
+  if (A.bombCd > 0) return;
   const reach = CELL_R * 2 + 2;
   for (const b of A.cells) {
     if (b.type !== "bomb" || b.spent) continue;
+    if (A.bombCd > 0) break;
     if (Math.hypot(b.wx - B.x, b.wy - B.y) > B.radius + reach) continue;
     for (const t of B.cells) {
       if (Math.hypot(b.wx - t.wx, b.wy - t.wy) < reach) {
+        A.bombCd = BOMB_GAP;
         const lost = A.damageCell(b, 99);
         if (lost.length) shedCells(A, lost);
         break;
@@ -1704,6 +2094,30 @@ function drawCell(c2d, cell, x, y, rot, ox, oy, phase) {
     c2d.fillStyle = "#fff0c2"; c2d.fill();
   }
 
+  if (cell.type === "flex") {
+    // a rubbery seam: two soft lobes rather than a flat plate
+    c2d.beginPath();
+    c2d.arc(x - ox * HEX * 0.28, y - oy * HEX * 0.28, HEX * 0.42, 0, TAU);
+    c2d.arc(x + ox * HEX * 0.28, y + oy * HEX * 0.28, HEX * 0.42, 0, TAU);
+    c2d.fillStyle = "#878fae"; c2d.fill();
+    c2d.strokeStyle = "#39405c"; c2d.lineWidth = 1; c2d.stroke();
+  }
+
+  if (cell.type === "parasite") {
+    const pu = 1 + Math.sin(phase * 2.6) * 0.18;
+    c2d.beginPath();
+    c2d.arc(x, y, HEX * 0.32 * pu, 0, TAU);
+    c2d.fillStyle = cell.bank ? "#e0a6f5" : "#4d2359"; c2d.fill();
+    c2d.strokeStyle = "#b06fc9"; c2d.lineWidth = 1.2;
+    for (let i = 0; i < 3; i++) {
+      const a = i * (TAU / 3) + phase * 0.4;
+      c2d.beginPath();
+      c2d.moveTo(x + Math.cos(a) * HEX * 0.4, y + Math.sin(a) * HEX * 0.4);
+      c2d.lineTo(x + Math.cos(a) * HEX * 0.78, y + Math.sin(a) * HEX * 0.78);
+      c2d.stroke();
+    }
+  }
+
   if (cell.type === "gland") {
     const pu = 1 + Math.sin(phase * 2.2) * 0.22;
     c2d.beginPath();
@@ -1920,7 +2334,8 @@ function update(dt) {
     if (c.faction !== "player" && c.ai) runAI(c, dt);
     c.step(dt);
     if (c.counts.gland > 0) fireGlands(c, dt);
-    if (c.cells.some(x => x.rot)) stepPoison(c, dt);
+    if (c.counts.parasite > 0) stepParasites(c, dt);
+    if (c.cells.some(x => x.rot || x.wither > 0)) { stepPoison(c, dt); witherState(c, dt); }
   }
   stepOrbs(dt);
 
@@ -2019,6 +2434,12 @@ function housekeeping(dt) {
   world.debris = world.debris.filter(d => Math.hypot(d.x - ox, d.y - oy) < DESPAWN_DIST);
   world.orbs = world.orbs.filter(o => Math.hypot(o.x - ox, o.y - oy) < DESPAWN_DIST);
 
+  maybeSpawnBoss();
+  if (world.boss && (world.boss.dead || !world.creatures.includes(world.boss))) {
+    world.boss = null;
+    if (!world.bossBeaten) { world.bossBeaten = true; offerReward(); }
+  }
+
   const wantCreatures = Math.round(9 + threatLevel() * 2);
   if (world.creatures.length < wantCreatures) spawnCreature();
   if (world.food.length < FOOD_TARGET) spawnFoodPatch(false);
@@ -2080,6 +2501,7 @@ function buildPalette() {
   // "spike" is not a cell, it is a spine you bolt onto one — it rides in the
   // same list because that is where a player looks for it
   for (const t of ["spike", ...CELL_ORDER]) {
+    if (!isUnlocked(t)) continue;          // earned cells stay hidden until taken
     const d = t === "spike" ? SPIKE : CELLS[t];
     const b = document.createElement("button");
     b.className = "cellbtn" + (t === selectedType ? " sel" : "");
@@ -2415,6 +2837,33 @@ el("btn-detach").onclick = () => {
 el("btn-apply").onclick = () => toggleEditor();
 
 /* ------------------------------------------------------------- start / die */
+
+/** One cell from the ring's corpse. Picking one closes the other off. */
+function offerReward() {
+  const host = el("reward-picks");
+  host.innerHTML = "";
+  for (const t of ["flex", "parasite"]) {
+    if (unlocked.has(t)) continue;
+    const d = CELLS[t];
+    const b = document.createElement("button");
+    b.className = "pick";
+    b.dataset.pick = t;
+    b.innerHTML =
+      '<span class="sw" style="background:' + d.color + ';border:1px solid ' + d.edge + '"></span>' +
+      '<span class="nm">' + d.name + '</span>' +
+      '<span class="ds">' + d.desc + '</span>';
+    b.onclick = () => {
+      unlocked.add(t);
+      el("reward").classList.remove("open");
+      buildPalette();
+      refreshEditorStats();
+      saveDesign();
+    };
+    host.appendChild(b);
+  }
+  if (!host.children.length) return;
+  el("reward").classList.add("open");
+}
 
 const splash = el("splash");
 
