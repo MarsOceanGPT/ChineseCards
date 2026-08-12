@@ -27,8 +27,8 @@ you swim, how hard you turn, what you can kill, and what kills you.
 | **Flexible** | 7 | 1.6 | 2 | *Earned.* Rubbery: spines slide off it, but rot races through and eats it outright. |
 | **Parasite** | 9 | 1.1 | 1 | *Earned.* Bites what it touches, banks the life, then mends your worst-damaged cell. |
 
-The last two are not on the bench when you start. They are the ring's cells,
-and you take **one** of them off its corpse.
+The last two are not on the bench when you start. They are the hive queen's
+cells, and you take **one** of them off her corpse.
 
 **Spikes are not cells.** A spike is a spine you bolt onto a cell you already
 have, for +7 biomass and +0.6 mass, and the cell underneath keeps doing its job
