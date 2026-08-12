@@ -159,22 +159,47 @@ to print nutrients.
 - **Darter** — armoured and jet-driven, so shearing its tails off is not an
   option, because it hasn't got any.
 
-## The ring
+## Growing back
+
+Take the **parasite** path and your body slowly knits itself back together — a
+lost cell returns roughly every eleven seconds, but only cells you were built
+with, and only where something is still there to grow from. It is a way to
+recover between fights, not a way to win one.
+
+The hive queen does the same thing a little faster.
+
+## The hive queen
 
 When your biomass cap reaches its maximum of 250 — when there is nothing left
 to grow into — something turns up.
 
-It is a wheel of armour plate and spines, hinged at intervals with rubber that
-your spines cannot bite. Three thin spokes hold a single heart at the dead
-centre, and pods wait in the hollows: an angry neuron, a parasite and a tail
-each, which it cuts loose and throws at you.
+She is built the way you would build her by hand: three plated cells in a line,
+then three rubber ones, all the way round; spines here and there; a heart in
+the middle under its own armour; and three long armour sticks running out to
+the rim. Those sticks cut the inside into three chambers, and **each chamber has
+its own door** cut into the rim. The doors are not damage — they were never
+grown.
 
-One arc of the rim was never grown. That gap is the door, and it is not a
-mistake. You get in through it, or you shoot through it from range, or you
-don't get in at all.
+Parked in the chambers are her drones: an angry neuron, a parasite and a tail
+apiece, on a single seam. She cuts them loose and throws them at you.
 
-Break it and you take one of its two cells for your own. One only — the other
-stays in the ring.
+She is about 500px across and the camera pulls back when you get near her, so
+you can see the whole thing and pick your door.
+
+**She knits herself back together**, a cell every nine seconds, which is a
+little faster than you can if you took the parasite path. That makes her a
+race: chew faster than she mends, or you will be there all day.
+
+Kill her and you take one of her two cells for your own. One only — the other
+dies with her.
+
+Two things about her shape are load-bearing rather than decorative:
+
+- Her radius is a multiple of three, because the rim only divides into runs of
+  three if it is. At radius 7 the pattern came out 3-and-4.
+- Her doors are six cells wide, because at four the gap is 76px and a 19-cell
+  armoured body is 122px across — the exact build she is meant to reward could
+  not physically fit through her.
 
 Hostiles lunge and then peel away to line up again. That recovery is when their
 flank is open — a hunter that simply tracked you would keep its spiked face

@@ -268,11 +268,11 @@
 
 <div id="reward">
   <div class="card panel">
-    <h1>The ring is broken</h1>
-    <div class="tag">take one of its cells for your own</div>
+    <h1>The hive queen is dead</h1>
+    <div class="tag">take one of her cells for your own</div>
     <div id="reward-picks"></div>
     <p style="text-align:center;color:#7fa6b8;font-size:11.5px;margin:0">
-      One only. The other stays in the ring.</p>
+      One only. The other dies with her.</p>
   </div>
 </div>
 
@@ -391,6 +391,8 @@ const isUnlocked = t => !CELLS[t] || !CELLS[t].locked || unlocked.has(t);
 const PARASITE_BITE = 1.4;      // seconds between bites
 const PARASITE_BANK = 3;        // most life one parasite can hold at a time
 const PARASITE_MEND = 1.4;      // seconds between repairs
+const PLAYER_REGEN = 11;        // seconds per regrown cell, if you took the parasite
+const QUEEN_REGEN = 9;          // the queen knits herself back a little faster than you
 const FLEX_ROT_SPEED = 2.2;     // how much faster rot chews through rubber
 
 /**
@@ -670,6 +672,19 @@ function starterDesign() {
 
 let nextId = 1;
 
+/** A live cell from a blueprint entry. */
+function makeCell(c) {
+  return {
+    q: c.q, r: c.r, type: c.type,
+    hp: CELLS[c.type].hp, maxHp: CELLS[c.type].hp,
+    spike: !!c.spike, spikeHp: c.spike ? SPIKE.hp : 0,
+    tail: c.type === "flagellum",         // a physical thing that can be cut off
+    lx: 0, ly: 0, ox: 1, oy: 0,           // local pos + outward normal
+    wx: 0, wy: 0, cd: 0, flash: 0, fire: rand(0.5, GLAND_CD[1]),
+    bite: 0, mend: PARASITE_MEND, bank: 0, wither: 0,
+  };
+}
+
 class Creature {
   constructor(design, x, y, angle, faction) {
     this.id = nextId++;
@@ -686,15 +701,10 @@ class Creature {
     this.isDrone = false;
     this.team = null;               // set on drones: whose side they fight for
     this.life = Infinity;
-    this.cells = normalizeDesign(design).map(c => ({
-      q: c.q, r: c.r, type: c.type,
-      hp: CELLS[c.type].hp, maxHp: CELLS[c.type].hp,
-      spike: !!c.spike, spikeHp: c.spike ? SPIKE.hp : 0,
-      tail: c.type === "flagellum",         // a physical thing that can be cut off
-      lx: 0, ly: 0, ox: 1, oy: 0,           // local pos + outward normal
-      wx: 0, wy: 0, cd: 0, flash: 0, fire: rand(0.5, GLAND_CD[1]),
-      bite: 0, mend: PARASITE_MEND, bank: 0, wither: 0,
-    }));
+    this.blueprint = normalizeDesign(design);   // what it can grow back toward
+    this.regenRate = 0;
+    this.regen = 0;
+    this.cells = this.blueprint.map(makeCell);
     this.rebuild();
     this.syncCells();
   }
@@ -964,23 +974,64 @@ function bpDarter() {
  * plate, spines facing out), so you either shoot through the gap from range
  * or you go in and survive the inside.
  */
-const BOSS_RING = 6;
-function bpRing() {
+// Radius has to be a multiple of 3, or the rim does not divide into runs of
+// three and the plate/rubber pattern comes out as 3-and-4.
+const BOSS_RING = 9;
+// Door width in rim cells. This is a real constraint, not a look: at four
+// cells the gap is 76px and a 19-cell armoured body is 122px across, so the
+// one build the queen is supposed to reward — armour up and go in — could not
+// physically fit through her.
+const QUEEN_DOOR = 6;
+const QUEEN_SPOKES = [[1, 0], [0, -1], [-1, 1]];   // 120 degrees apart
+
+/**
+ * The hive queen, built the way it was described to me:
+ *
+ *   three plated cells in a line, then three rubber ones, all the way round,
+ *   spines here and there, a heart in the middle under its own armour, three
+ *   long armour sticks out to the rim, and a door cut into each of the three
+ *   chambers those sticks divide the inside into.
+ *
+ * The rubber sits on the corners, which is where a real hinge would go, and
+ * every chamber gets its own way in — three doors, not one, so you can never
+ * be locked out of the side of her you want.
+ */
+function bpHiveQueen() {
   const d = [{ q: 0, r: 0, type: "heart" }];
 
-  // the rim: armour plate and spines, hinged with rubber, and one missing arc
-  const ring = hexRing(BOSS_RING);
-  ring.forEach((h, i) => {
-    if (i < 3) return;                   // the door
-    const hinge = i % 6 === 3;
+  // where the three doors go: the bisector of each chamber
+  const doorAngles = QUEEN_SPOKES.map(([dq, dr], i) => {
+    const a = QUEEN_SPOKES[i], b = QUEEN_SPOKES[(i + 1) % QUEEN_SPOKES.length];
+    const pa = axialToPixel(a[0], a[1]), pb = axialToPixel(b[0], b[1]);
+    return Math.atan2(pa.y + pb.y, pa.x + pb.x);
+  });
+
+  const rim = hexRing(BOSS_RING);
+  const doorCells = new Set();
+  for (const target of doorAngles) {
+    const sorted = rim.map((h, i) => {
+      const p = axialToPixel(h.q, h.r);
+      return { i, off: Math.abs(angleDiff(target, Math.atan2(p.y, p.x))) };
+    }).sort((u, v) => u.off - v.off);
+    for (let k = 0; k < QUEEN_DOOR; k++) doorCells.add(sorted[k].i);
+  }
+
+  // plate, rubber, plate, rubber — threes, with the rubber on the corners
+  rim.forEach((h, i) => {
+    if (doorCells.has(i)) return;
+    // Offset the rubber so each doorway straddles a plate run and a hinge run.
+    // Line them up exactly and the three doors eat all of one material: phase
+    // it one way and she loses half her hinges, the other and she is nearly
+    // all rubber, which no spine can touch.
+    const fromCorner = (i + 1) % 6;
+    const hinge = fromCorner < 3;
     d.push({ ...h, type: hinge ? "flex" : "armor", spike: !hinge && i % 2 === 0 });
   });
 
-  // three thin spokes holding the heart, leaving wide hollows between them
-  for (const [dq, dr] of [[1, 0], [0, -1], [-1, 1]]) {
-    for (let k = 1; k < BOSS_RING; k++) {
-      d.push({ q: dq * k, r: dr * k, type: k <= 2 ? "armor" : "normal" });
-    }
+  // the heart under its own shell, and three sticks out to the rim
+  for (const h of hexRing(1)) d.push({ ...h, type: "armor" });
+  for (const [dq, dr] of QUEEN_SPOKES) {
+    for (let k = 2; k < BOSS_RING; k++) d.push({ q: dq * k, r: dr * k, type: "armor" });
   }
 
   // Pods hang in the hollows on a single seam. Finding the attachment by
@@ -1115,9 +1166,18 @@ function loadProgress() {
 
 function capForNutrients(n) { return Math.min(CAP_MAX, Math.floor(START_CAP + n * CAP_PER_NUTRIENT)); }
 
+/** Perks the player's body carries, wherever it was just built. */
+function dressPlayer(p) {
+  // the parasite path also knits you back together between fights
+  p.regenRate = unlocked.has("parasite") ? PLAYER_REGEN : 0;
+  p.regen = p.regenRate;
+  return p;
+}
+
 function spawnPlayer() {
   const p = new Creature(design, 0, 0, 0, "player");
   p.shield = SPAWN_SHIELD;
+  dressPlayer(p);
   world.player = p;
   world.creatures.push(p);
   return p;
@@ -1165,10 +1225,12 @@ function maybeSpawnBoss() {
   if (world.boss || world.bossBeaten) return;
   if (world.cap < CAP_MAX) return;
   const { x, y } = spawnRing(rand(900, 1200));
-  const b = new Creature(bpRing(), x, y, Math.random() * TAU, "hostile");
-  b.species = "ring";
+  const b = new Creature(bpHiveQueen(), x, y, Math.random() * TAU, "hostile");
+  b.species = "queen";
   b.isBoss = true;
-  b.ai = makeAI("ring", b.angle);
+  b.ai = makeAI("queen", b.angle);
+  b.regenRate = QUEEN_REGEN;
+  b.regen = QUEEN_REGEN;
   b.ai.spin = (Math.random() < 0.5 ? -1 : 1) * rand(0.25, 0.45);
   world.creatures.push(b);
   world.boss = b;
@@ -1369,8 +1431,8 @@ function runAI(c, dt) {
     return;
   }
 
-  // The ring: turns slowly, closes slowly, and throws pods at you.
-  if (ai.kind === "ring") {
+  // The hive queen: turns slowly, closes slowly, and throws drones at you.
+  if (ai.kind === "queen") {
     c.av += (ai.spin - c.av) * Math.min(1, dt * 12);
     c.thrust = 0;
     if (p && !p.dead) {
@@ -1808,6 +1870,34 @@ function parasitePass(A, B) {
       if (isMine(A)) gainNutrients(lost.length * 2);
     }
   }
+}
+
+/**
+ * Grow a lost cell back.
+ *
+ * Only cells the body was originally built with, only where something is still
+ * there to grow from, and only one at a time on a long timer. It is a way to
+ * recover between fights, not a way to win one — a queen mending herself
+ * faster than you can chew is exactly the point of her.
+ */
+function stepRegrow(creature, dt) {
+  if (!creature.regenRate) return;
+  creature.regen -= dt;
+  if (creature.regen > 0) return;
+  creature.regen = creature.regenRate;
+
+  const have = new Set(creature.cells.map(c => key(c.q, c.r)));
+  const gaps = creature.blueprint.filter(c =>
+    !have.has(key(c.q, c.r)) &&
+    HEX_DIRS.some(([dq, dr]) => have.has(key(c.q + dq, c.r + dr))));
+  if (!gaps.length) return;
+
+  const born = makeCell(gaps[Math.floor(Math.random() * gaps.length)]);
+  born.hp = 1;                              // it comes back tender
+  creature.cells.push(born);
+  creature.rebuild();
+  creature.syncCells();
+  spark(born.wx, born.wy, "#9fe8c0", 6);
 }
 
 /** Spend banked life on the most damaged cell we have. */
@@ -2335,6 +2425,7 @@ function update(dt) {
     c.step(dt);
     if (c.counts.gland > 0) fireGlands(c, dt);
     if (c.counts.parasite > 0) stepParasites(c, dt);
+    if (c.regenRate) stepRegrow(c, dt);
     if (c.cells.some(x => x.rot || x.wither > 0)) { stepPoison(c, dt); witherState(c, dt); }
   }
   stepOrbs(dt);
@@ -2454,7 +2545,14 @@ function housekeeping(dt) {
     cam.y = lerp(cam.y, ty, 1 - Math.exp(-6 * dt));
     // Fit a target span of water to the *short* screen edge, so a phone sees
     // about as much sea as a desktop instead of a keyhole three times tighter.
-    const span = Math.max(p.radius * 8, 620);
+    let span = Math.max(p.radius * 8, 620);
+    // the queen is nearly 500px across; without pulling back she runs off the
+    // edge of the screen and you cannot see the door you are aiming for
+    const boss = world.boss;
+    if (boss && !boss.dead) {
+      const d = Math.hypot(boss.x - p.x, boss.y - p.y);
+      if (d < 1200) span = clamp((d + boss.radius + p.radius) * 2.1, span, 1700);
+    }
     const want = clamp(Math.min(W, H) / span, 0.38, 1.35);
     cam.zoom = lerp(cam.zoom, want, 1 - Math.exp(-2.5 * dt));
     shake = Math.max(0, shake - dt * 2.6);
@@ -2691,6 +2789,7 @@ function applyDesign() {
     const np = new Creature(design, nx, ny, na, "player");
     np.vx = nvx; np.vy = nvy;
     np.shield = Math.max(p.shield, 0.9);
+    dressPlayer(np);
     world.player = np;
     if (i >= 0) world.creatures[i] = np; else world.creatures.push(np);
     spark(nx, ny, "#8fd6a8", 14);
@@ -2854,6 +2953,7 @@ function offerReward() {
       '<span class="ds">' + d.desc + '</span>';
     b.onclick = () => {
       unlocked.add(t);
+      if (world.player && !world.player.dead) dressPlayer(world.player);
       el("reward").classList.remove("open");
       buildPalette();
       refreshEditorStats();
@@ -2903,6 +3003,7 @@ function respawn() {
   }
   const p = new Creature(design, x, y, Math.random() * TAU, "player");
   p.shield = SPAWN_SHIELD;
+  dressPlayer(p);
   world.player = p;
   world.creatures.push(p);
   cam.x = x; cam.y = y;
