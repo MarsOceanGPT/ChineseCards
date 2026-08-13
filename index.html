@@ -196,6 +196,7 @@
   <div class="row"><span class="k">cells</span><span id="h-cells">9</span></div>
   <div class="row opt"><span class="k">speed</span><span id="h-speed">0</span></div>
   <div class="row"><span class="k">nutrients</span><span id="h-nutri">0</span></div>
+  <div class="row"><span class="k">in reserve</span><span id="h-stock">0</span></div>
   <div class="row" style="margin-top:6px"><span class="k">biomass</span><span id="h-bio">0 / 56</span></div>
   <div id="bio-wrap"><div id="bio-bar"></div></div>
 </div>
@@ -233,6 +234,7 @@
     <div class="row"><span class="k">top speed</span><span id="s-speed">0</span></div>
     <div class="row"><span class="k">turn rate</span><span id="s-turn">0</span></div>
     <div class="row"><span class="k">toughness</span><span id="s-tough">0</span></div>
+    <div class="row" style="margin-top:6px"><span class="k">grow cost</span><span id="s-price">0</span></div>
     <div id="s-warn" class="warn"></div>
   </div>
 </div>
@@ -268,11 +270,11 @@
 
 <div id="reward">
   <div class="card panel">
-    <h1>The hive queen is dead</h1>
-    <div class="tag">take one of her cells for your own</div>
+    <h1 id="reward-title">The hive queen is dead</h1>
+    <div class="tag">take one of its cells for your own</div>
     <div id="reward-picks"></div>
     <p style="text-align:center;color:#7fa6b8;font-size:11.5px;margin:0">
-      One only. The other dies with her.</p>
+      One only — the rest dies with it.</p>
   </div>
 </div>
 
@@ -316,6 +318,8 @@ const START_CAP = 56;           // starting biomass allowance (starter body cost
 const CAP_PER_NUTRIENT = 0.6;
 const CAP_MAX = 250;   // the ring turns up when you reach this
 const FOOD_VALUE = 2;
+const GROW_RATE = 1;            // nutrients per point of biomass you have to grow
+const START_STOCK = 36;         // enough to tinker with before you have eaten
 
 const VIEW_SPAWN_MIN = 780;     // enemies appear in a ring around you
 const VIEW_SPAWN_MAX = 1350;
@@ -333,7 +337,7 @@ const CELLS = {
   normal: {
     name: "Normal",  color: "#e7b48c", edge: "#8a6046",
     cost: 3,  mass: 1.0, hp: 1,
-    desc: "Muscle. Few of these and you're a slow target."
+    desc: "Muscle. Every drive needs one of these behind it to pull at all."
   },
   armor: {
     name: "Armour",  color: "#eef4f7", edge: "#94a7b2",
@@ -393,6 +397,7 @@ const PARASITE_BANK = 3;        // most life one parasite can hold at a time
 const PARASITE_MEND = 1.4;      // seconds between repairs
 const PLAYER_REGEN = 11;        // seconds per regrown cell, if you took the parasite
 const QUEEN_REGEN = 9;          // the queen knits herself back a little faster than you
+const BLOOM_DELAY = 75;         // seconds of quiet after the queen before the Bloom
 const FLEX_ROT_SPEED = 2.2;     // how much faster rot chews through rubber
 
 /**
@@ -415,6 +420,7 @@ const BOMB_GAP = 0.7;           // seconds before another of your mines can go o
 const DRONE_LIFE = 30;          // seconds a detached hunting piece survives
 const DRONE_RAGE = 2.4;         // how much harder a woken neuron drives its pod
 const JET_BURIED = 0.55;        // a walled-in jet still finds a seam, at a price
+const MUSCLE_FLOOR = 0.5;       // drive power you get with no flesh at all
 
 /**
  * Rot weakens, it does not kill.
@@ -616,7 +622,6 @@ function swimStats(cells, mass, layout) {
   for (const c of cells) if (c.type === "normal" && !c.wither) normalMass += CELLS.normal.mass;
   const m = mass !== undefined ? mass : cells.reduce((s, c) => s + cellMass(c), 0);
   const muscle = m > 0 ? normalMass / m : 0;
-  const speedFactor = 0.35 + 0.9 * muscle;
 
   // A buried tail still costs mass and biomass but pushes nothing. A buried jet
   // vents through the seams between cells, so it keeps working — just weakly.
@@ -629,12 +634,25 @@ function swimStats(cells, mass, layout) {
       if (L.blocked[i]) { buried++; units += JET_BURIED; } else units += 1;
     }
   }
-  const force = units * FLAG_POWER * speedFactor;
-  const turnPower = (0.4 + 0.8 * units) * (0.5 + 0.7 * muscle);
+  // Every drive needs flesh behind it to work. One normal cell powers one
+  // drive; past that the drive is dead weight, and past *that* the flesh is.
+  //
+  // The old rule scaled thrust by what fraction of your mass was flesh, which
+  // sounded right and did nothing: adding a normal cell made you slower,
+  // because the fraction barely moved while the mass definitely did. Flesh had
+  // no job. Now it has exactly one, and it is a job nothing else can do.
+  let muscleCells = 0;
+  for (const c of cells) if (c.type === "normal" && !c.wither) muscleCells++;
+  const muscleUnits = MUSCLE_FLOOR + muscleCells;
+  const powered = Math.min(units, muscleUnits);
+
+  const force = powered * FLAG_POWER;
+  const turnPower = 0.4 + 0.8 * powered;
   const linDamp = m > 0 ? LIN_DAMP * (m + HULL_DRAG) / m : LIN_DAMP;
   return {
-    n, mass: m, muscle, speedFactor, force, turnPower, linDamp,
-    units, buried, drives: n.flagellum + n.jet,
+    n, mass: m, muscle, force, turnPower, linDamp,
+    units, powered, muscleUnits, buried, drives: n.flagellum + n.jet,
+    starved: Math.max(0, units - muscleUnits),
     topSpeed: m > 0 ? force / (m + HULL_DRAG) : 0,
     turnRate: m > 0 ? turnPower * TURN_K / (m + HULL_DRAG) / ANG_DAMP : 0,
   };
@@ -749,14 +767,17 @@ class Creature {
     // the runtime must feel that immediately.
     let units = 0;
     for (const c of cells) units += c.drive;
-    this.units = units;
-    this.speedFactor = perf.speedFactor;
+    let muscleCells = 0;
+    for (const c of cells) if (c.type === "normal" && !c.wither) muscleCells++;
+    // only as much drive as there is flesh to power it
+    this.units = Math.min(units, MUSCLE_FLOOR + muscleCells);
+    this.rawUnits = units;
     // A severed pod carries no flesh, so by the ordinary muscle rule it would
     // crawl and never catch anything. The neuron drives it far harder than a
     // calm body would — that is the whole point of an angry one.
     const rage = this.isDrone ? DRONE_RAGE : 1;
-    this.thrustForce = units * FLAG_POWER * perf.speedFactor * rage;
-    this.turnPower = (0.4 + 0.8 * units) * (0.5 + 0.7 * perf.muscle) * (this.isDrone ? 1.6 : 1);
+    this.thrustForce = this.units * FLAG_POWER * rage;
+    this.turnPower = (0.4 + 0.8 * this.units) * (this.isDrone ? 1.6 : 1);
     this.maxSpeed = this.thrustForce / (this.mass + HULL_DRAG);
     this.linDamp = perf.linDamp;
     this.dragMass = this.mass + HULL_DRAG;
@@ -786,8 +807,8 @@ class Creature {
     if (this.shield > 0) this.shield -= dt;
     if (this.bombCd > 0) this.bombCd -= dt;
     // flagella push along -outward, so a tail at the back drives you forward
-    if (this.thrust !== 0 && this.units > 0) {
-      const per = this.thrustForce / this.units * this.thrust;
+    if (this.thrust !== 0 && this.units > 0 && this.rawUnits > 0) {
+      const per = this.thrustForce / this.rawUnits * this.thrust;
       for (const c of this.cells) {
         if (!c.drive) continue;
         const f = per * c.drive;
@@ -933,7 +954,7 @@ function bpSpitter() {
   for (const h of hexRing(1)) d.push({ ...h, type: "normal" });
   for (const h of hexRing(2)) {
     const p = axialToPixel(h.q, h.r);
-    d.push({ ...h, type: p.x > 14 ? "gland" : (p.x < -20 ? "flagellum" : "normal") });
+    d.push({ ...h, type: p.x > 14 ? "gland" : (p.x < -30 ? "flagellum" : "normal") });
   }
   return d;
 }
@@ -946,7 +967,7 @@ function bpPopper() {
     const p = axialToPixel(h.q, h.r);
     // three warheads, not five: at five, one contact wipes even an armoured
     // body in under three seconds with no way to disengage
-    d.push({ ...h, type: p.x > 30 ? "bomb" : (p.x < -20 ? "flagellum" : "normal") });
+    d.push({ ...h, type: p.x > 30 ? "bomb" : (p.x < -30 ? "flagellum" : "normal") });
   }
   return d;
 }
@@ -1103,6 +1124,43 @@ function connectedTo(design, q0, r0) {
   return design.filter(c => seen.has(key(c.q, c.r)));
 }
 
+/**
+ * The Bloom — the second boss, and deliberately nothing like the first.
+ *
+ * Where the queen is a fortress you go inside, this is a hunter grown huge and
+ * studded with glands, and it comes to you. It has no drones and no doors: it
+ * simply fills the water with rot. Plate is scattered through its bulk at
+ * random rather than laid on the surface, so there is no clean shell to chew —
+ * you find soft ground by looking, not by circling.
+ *
+ * Rot goes straight past spines, so a spike wall is no answer. Either be quick
+ * enough not to be hit, or carry enough armour and enough drive to close.
+ */
+const BLOOM_R = 4;
+function bpBloom() {
+  const d = [];
+  const dist = (q, r) => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+  let rimSeen = 0;
+  for (const h of hexDisc(BLOOM_R)) {
+    const p = axialToPixel(h.q, h.r);
+    const k = dist(h.q, h.r);
+    let type;
+    if (k === 0) type = "heart";
+    else if (k === 1) type = "armor";                 // the core is plated
+    // glands on every other rim cell facing forward. All of them is a wall of
+    // orbs you cannot read, never mind dodge.
+    else if (k === BLOOM_R && p.x > -30) type = (rimSeen++ % 3 !== 2) ? "gland" : "normal";
+    else if (p.x < -50) type = "flagellum";
+    else type = Math.random() < 0.22 ? "armor" : "normal";
+    d.push({ q: h.q, r: h.r, type, spike: k === BLOOM_R && p.x > 30 });
+  }
+  // a second heart, off-centre, so one lucky orb through the middle is not the
+  // whole fight
+  const spare = d.find(c => c.q === -2 && c.r === 1);
+  if (spare) spare.type = "heart";
+  return d;
+}
+
 const SPECIES = {
   spikeball: { bp: bpSpikeball, faction: "hostile", ai: "drift",  weight: 3 },
   swimmer:   { bp: bpSwimmer,   faction: "hostile", ai: "chase",  weight: 3 },
@@ -1122,7 +1180,8 @@ const world = {
   debris: [],
   orbs: [],
   player: null,
-  nutrients: 0,
+  nutrients: 0,          // lifetime earned: sets the cap, never spent
+  stock: START_STOCK,    // spendable: what growing costs come out of
   cap: START_CAP,
   time: 0,
   running: false,
@@ -1130,6 +1189,8 @@ const world = {
   saveTimer: 6,
   boss: null,
   bossBeaten: false,
+  bloomBeaten: false,
+  bloomTimer: 0,
 };
 
 loadProgress();          // unlocks must be known before a design is filtered
@@ -1150,8 +1211,10 @@ function saveDesign() {
   try {
     localStorage.setItem("cellsea.design", JSON.stringify(design));
     localStorage.setItem("cellsea.nutrients", String(world.nutrients));
+    localStorage.setItem("cellsea.stock", String(Math.round(world.stock)));
     localStorage.setItem("cellsea.unlocked", JSON.stringify([...unlocked]));
     localStorage.setItem("cellsea.boss", world.bossBeaten ? "1" : "0");
+    localStorage.setItem("cellsea.bloom", world.bloomBeaten ? "1" : "0");
   } catch (e) { /* private mode, whatever */ }
 }
 
@@ -1161,6 +1224,7 @@ function loadProgress() {
       if (CELLS[t]) unlocked.add(t);
     }
     world.bossBeaten = localStorage.getItem("cellsea.boss") === "1";
+    world.bloomBeaten = localStorage.getItem("cellsea.bloom") === "1";
   } catch (e) { /* ignore */ }
 }
 
@@ -1221,8 +1285,22 @@ function spawnCreature() {
  * wall at the end of the growth curve: nothing else in the sea is a reason to
  * stop eating, so this is what the cap is *for*.
  */
-function maybeSpawnBoss() {
-  if (world.boss || world.bossBeaten) return;
+function maybeSpawnBoss(bossDt) {
+  if (world.boss) return;
+  // the Bloom comes looking for you a while after the queen falls
+  if (world.bossBeaten) {
+    if (world.bloomBeaten) return;
+    world.bloomTimer -= bossDt;
+    if (world.bloomTimer > 0) return;
+    const at = spawnRing(rand(900, 1200));
+    const bl = new Creature(bpBloom(), at.x, at.y, Math.random() * TAU, "hostile");
+    bl.species = "bloom";
+    bl.isBoss = true;
+    bl.ai = makeAI("chase", bl.angle);
+    world.creatures.push(bl);
+    world.boss = bl;
+    return;
+  }
   if (world.cap < CAP_MAX) return;
   const { x, y } = spawnRing(rand(900, 1200));
   const b = new Creature(bpHiveQueen(), x, y, Math.random() * TAU, "hostile");
@@ -2001,7 +2079,8 @@ function exhaust(x, y, vx, vy) {
 }
 
 function gainNutrients(n) {
-  world.nutrients += n;
+  world.nutrients += n;                 // lifetime total drives the cap
+  world.stock += n;                     // and the same food is what you spend
   world.cap = capForNutrients(world.nutrients);
 }
 
@@ -2481,6 +2560,7 @@ function update(dt) {
   if (p && p.dead && world.deathTimer === 0) {
     world.deathTimer = 1;
     world.nutrients = Math.floor(world.nutrients * 0.75);
+    world.stock = Math.floor(world.stock * 0.75);
     world.cap = capForNutrients(world.nutrients);
     saveDesign();
     if (editorOpen) toggleEditor();
@@ -2525,10 +2605,12 @@ function housekeeping(dt) {
   world.debris = world.debris.filter(d => Math.hypot(d.x - ox, d.y - oy) < DESPAWN_DIST);
   world.orbs = world.orbs.filter(o => Math.hypot(o.x - ox, o.y - oy) < DESPAWN_DIST);
 
-  maybeSpawnBoss();
+  maybeSpawnBoss(dt);
   if (world.boss && (world.boss.dead || !world.creatures.includes(world.boss))) {
+    const was = world.boss.species;
     world.boss = null;
-    if (!world.bossBeaten) { world.bossBeaten = true; offerReward(); }
+    if (was === "queen") { world.bossBeaten = true; world.bloomTimer = BLOOM_DELAY; offerReward("queen"); }
+    else if (was === "bloom") { world.bloomBeaten = true; offerReward("bloom"); }
   }
 
   const wantCreatures = Math.round(9 + threatLevel() * 2);
@@ -2576,6 +2658,7 @@ function updateHUD() {
   el("h-cells").textContent = p && !p.dead ? p.cells.length : 0;
   el("h-speed").textContent = p && !p.dead ? Math.round(Math.hypot(p.vx, p.vy)) : 0;
   el("h-nutri").textContent = world.nutrients;
+  el("h-stock").textContent = Math.floor(world.stock);
   el("h-bio").textContent = cost + " / " + world.cap;
   const bar = el("bio-bar");
   bar.style.width = clamp(cost / world.cap * 100, 0, 100) + "%";
@@ -2626,7 +2709,7 @@ function toggleEditor() {
     editDesign = design.map(c => ({ ...c }));
     refreshEditorStats();
   } else {
-    applyDesign();
+    applyDesign();          // silently declines if you cannot afford it
     if (wasDeadOverlay && world.player && world.player.dead) deadCard.style.display = "flex";
     wasDeadOverlay = false;
   }
@@ -2653,8 +2736,16 @@ function refreshEditorStats() {
   el("s-speed").textContent = Math.round(s.topSpeed);
   el("s-turn").textContent = s.turn.toFixed(1) + " r/s";
   el("s-tough").textContent = s.hp;
-  el("s-tails").textContent = perf.units.toFixed(1) + " / " + perf.drives;
-  el("s-tails").style.color = perf.buried > 0 ? "#ffb27a" : "";
+  const price = growPrice(d, world.player);
+  const affordable = price <= world.stock;
+  el("s-price").textContent = price + (price ? " / " + Math.floor(world.stock) : "");
+  el("s-price").style.color = affordable ? "" : "#e8455f";
+  const grow = el("btn-apply");
+  grow.textContent = price > 0 ? "Grow into it (" + price + ")" : "Grow into it";
+  grow.disabled = !affordable;
+  grow.style.opacity = affordable ? "" : "0.45";
+  el("s-tails").textContent = perf.powered.toFixed(1) + " / " + perf.drives;
+  el("s-tails").style.color = (perf.buried > 0 || perf.starved > 0.01) ? "#ffb27a" : "";
 
   const muscle = perf.muscle;
   el("s-muscle").textContent = Math.round(muscle * 100) + "%";
@@ -2676,8 +2767,10 @@ function refreshEditorStats() {
       " buried and venting at " + Math.round(JET_BURIED * 100) + "%");
     warns.push(walled.join(", ") + ".");
   }
-  if (perf.units === 0 && perf.drives > 0) warns.push("Nothing can move this body.");
-  else if (muscle < 0.25) warns.push("Too little muscle for this much body — you'll be sluggish prey.");
+  if (perf.starved > 0.01) {
+    warns.push("Only " + perf.muscleUnits.toFixed(1) + " of your " + perf.units.toFixed(1) +
+      " drives have flesh behind them. Every drive needs a normal cell to power it.");
+  }
   if (s.n.neuron > 0 && s.n.detach === 0) {
     warns.push("Angry neurons stay dormant until a detach seam frees them.");
   }
@@ -2685,6 +2778,11 @@ function refreshEditorStats() {
     warns.push("Detaching will just shed debris — no angry neuron to wake up.");
   }
   if (s.cost > world.cap) warns.push("Over the biomass limit. Eat more, or cut cells.");
+  if (price > world.stock) {
+    warns.push("Growing this costs " + price + " nutrients and you have " +
+      Math.floor(world.stock) + ". Cells you already carry are free to move about; " +
+      "it is the ones you have lost or added that have to be grown.");
+  }
   el("s-warn").textContent = warns.join(" ");
   el("btn-sym").textContent = "Symmetry: " + (symmetry ? "ON" : "OFF");
   el("btn-sym").classList.toggle("on", symmetry);
@@ -2776,9 +2874,31 @@ function editorPlace(remove) {
   refreshEditorStats();
 }
 
+/**
+ * What growing into a design would cost.
+ *
+ * You pay for biomass you do not currently have on your body. Rearranging what
+ * you already own is free; replacing what has been chewed off is not.
+ *
+ * Without this the bench was a free full-body restore, which broke two things
+ * at once: any damage could be undone by opening it, and a detach-bench-detach
+ * loop printed unlimited drones.
+ */
+function growPrice(target, creature) {
+  let have = 0;
+  if (creature && !creature.dead) for (const c of creature.cells) have += cellCost(c);
+  return Math.max(0, Math.ceil((designCost(target) - have) * GROW_RATE));
+}
+
 function applyDesign() {
   if (!editDesign) return;
   if (!editDesign.some(c => c.type === "heart")) { editDesign = null; return; }
+
+  const p0 = world.player;
+  const price = growPrice(editDesign, p0);
+  if (price > world.stock) { editDesign = null; return; }   // cannot afford it
+  world.stock -= price;
+
   design = editDesign.map(c => ({ ...c }));
   editDesign = null;
   saveDesign();
@@ -2933,12 +3053,13 @@ el("btn-detach").onclick = () => {
   const p = world.player;
   if (p && !p.dead) detachOnce(p);
 };
-el("btn-apply").onclick = () => toggleEditor();
+el("btn-apply").onclick = () => { if (!el("btn-apply").disabled) toggleEditor(); };
 
 /* ------------------------------------------------------------- start / die */
 
 /** One cell from the ring's corpse. Picking one closes the other off. */
-function offerReward() {
+function offerReward(who) {
+  el("reward-title").textContent = who === "bloom" ? "The Bloom is dead" : "The hive queen is dead";
   const host = el("reward-picks");
   host.innerHTML = "";
   for (const t of ["flex", "parasite"]) {
@@ -2973,6 +3094,8 @@ function startGame() {
   try {
     const n = parseInt(localStorage.getItem("cellsea.nutrients") || "0", 10);
     if (!Number.isNaN(n) && n > 0) { world.nutrients = n; world.cap = capForNutrients(n); }
+    const st = parseInt(localStorage.getItem("cellsea.stock") || "", 10);
+    if (!Number.isNaN(st)) world.stock = Math.max(0, st);
   } catch (e) { /* ignore */ }
   spawnPlayer();
   seedWorld();

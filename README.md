@@ -16,7 +16,7 @@ you swim, how hard you turn, what you can kill, and what kills you.
 | Cell | Cost | Mass | Hits to kill | What it does |
 | --- | --- | --- | --- | --- |
 | **Heart** | 10 | 1.4 | 2 | Lose every one and you dissolve. |
-| **Normal** | 3 | 1.0 | 1 | Muscle. Your drives can only pull as hard as the flesh behind them. |
+| **Normal** | 3 | 1.0 | 1 | Muscle. **Every drive needs one of these behind it** or it barely turns over. |
 | **Armour** | 8 | 3.0 | 3 | A harder, whiter normal cell. Tough, heavy, and it can snap the spines that hit it. |
 | **Flagellum** | 6 | 0.8 | 1 | Pushes *away from itself*. At the back it drives you forward; at the front it drives you backward. Bury it and it stops; cut the tail and it is just flesh. |
 | **Jet** | 9 | 1.4 | 2 | Gas thrust. Weaker when buried but never dead, and there is no tail to cut. |
@@ -60,15 +60,35 @@ BENCH and DETACH buttons replace the keys.
 
 ## Rules that matter
 
-**Biomass.** Every cell costs biomass and you have a limit. Too much armour, too
-many spikes, or simply too big a body and you can't add anything else. Eating
-raises the ceiling; dying costs you a quarter of what you've banked.
+**Biomass is the ceiling; nutrients are the bill.** Every cell costs biomass and
+you have a limit — too much armour, too many spikes, too big a body, and you
+can't add anything else. Eating raises that ceiling permanently.
 
-**Muscle is a fraction, not a count.** Speed depends on what share of your mass
-is normal cells, and every body pays some drag just for being in the water. That
-means shedding cells never buys you speed — get your normal cells chewed off and
-you are genuinely crippled, exactly the walking target you'd expect. An
-all-armour body tops out at about a fifth of a healthy swimmer's speed.
+Eating *also* fills a reserve, and **growing spends it**. Rearranging cells you
+already carry is free. Growing a cell you have lost, or adding one you never
+had, costs a nutrient per point of biomass. The bench shows the bill before you
+commit and refuses when you can't pay.
+
+That reserve exists because the bench used to be a free full-body restore. Any
+damage could be undone by opening it, and worse, you could detach a drone pod,
+open the bench, grow it back for nothing, and detach again — an unlimited supply
+of hunters for no cost at all. Now a pod costs about 28 nutrients to replace,
+so the loop runs dry.
+
+**Every drive needs flesh behind it.** One normal cell powers one flagellum or
+jet. Fit more drives than you have flesh and the extras barely turn over; fit
+more flesh than you have drives and it is dead weight. The bench shows
+`drive 2.0 / 3` — powered over fitted — and warns you when they don't match.
+
+This replaced a rule that sounded right and did nothing. Speed used to scale
+with what *fraction* of your mass was flesh, which meant adding a normal cell
+made you **slower**: the fraction barely moved and the mass definitely did.
+Flesh had no job at all. Measured before and after, on the same body: four
+drives with no flesh manages 22 px/s, and the same four drives with flesh behind
+them manage 308.
+
+Every body also pays some drag just for existing, so shedding cells never buys
+you speed.
 
 **A buried tail pushes nothing.** A flagellum needs open water behind it. Wall
 one in with your own cells and it still costs mass and biomass, but produces no
@@ -192,6 +212,21 @@ race: chew faster than she mends, or you will be there all day.
 
 Kill her and you take one of her two cells for your own. One only — the other
 dies with her.
+
+## The Bloom
+
+A while after the queen falls, something comes looking for you.
+
+Where she was a fortress you break into, the Bloom is a hunter grown huge and
+studded with poison glands, and it does the travelling. No drones, no doors, no
+shell to circle — plate is scattered at random through its bulk instead of laid
+on the surface, so soft ground has to be found by looking. Two hearts, so one
+lucky shot through the middle is not the whole fight.
+
+Rot goes straight past spines, so a wall of spikes is no answer to it. Either be
+quick enough not to be hit, or bring enough armour and enough drive to close.
+
+Beat it and you get the cell the queen didn't give you.
 
 Two things about her shape are load-bearing rather than decorative:
 
